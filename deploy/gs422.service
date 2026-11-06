@@ -1,0 +1,28 @@
+[Unit]
+Description=Gansuan independent RS422 telemetry and Wi-Fi service
+Wants=NetworkManager.service
+After=NetworkManager.service
+Conflicts=rs422.service shanhe-serial.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/gs422 --config /etc/gs422.conf
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+User=root
+UMask=0077
+LimitCORE=0
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+PrivateTmp=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+[Install]
+WantedBy=multi-user.target
