@@ -14,7 +14,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(list(f.feed(b'x'*512+b'\r')), [b'x'*512])
 
     def test_queries_and_injection(self):
-        for name in ('STA', 'IP1', 'IP2', 'WIFI'):
+        for name in ('STA', 'CPU', 'IP1', 'IP2', 'WIFI'):
             for suffix in ('', '?'):
                 self.assertEqual(parse(('AT+'+name+suffix).encode()), (name, None))
         for value in (b'AT+STA;reboot', b'AT+STA\x00', b'AT+FOO', b'\xff', None):
@@ -41,17 +41,26 @@ class ProtocolTests(unittest.TestCase):
     def test_cache_expiry_failed_read_and_independent_fields(self):
         clock = [10.]
         cache = Cache(5000, lambda: clock[0])
-        self.assertEqual(cache.reply(), '+STA:-,-,-,-')
+        self.assertEqual(cache.reply(), '+STA:NPU_TEMP=-,NPU_POWER=-,RK_TEMP=-,VIN12_CURRENT=-')
         cache.update(0, 0)
         cache.update(2, 3700)
         clock[0] = 14.999
         cache.update(0, None)
         cache.update(1, 4920)
-        self.assertEqual(cache.reply(), '+STA:0,4920,3700,-')
+        self.assertEqual(cache.reply(), '+STA:NPU_TEMP=0.00C,NPU_POWER=4.920W,RK_TEMP=37.00C,VIN12_CURRENT=-')
         clock[0] = 15.
-        self.assertEqual(cache.reply(), '+STA:-,4920,-,-')
+        self.assertEqual(cache.reply(), '+STA:NPU_TEMP=-,NPU_POWER=4.920W,RK_TEMP=-,VIN12_CURRENT=-')
         cache.update(3, 1200)
-        self.assertEqual(cache.reply(), '+STA:-,4920,-,1200')
+        self.assertEqual(cache.reply(), '+STA:NPU_TEMP=-,NPU_POWER=4.920W,RK_TEMP=-,VIN12_CURRENT=1200mA')
+
+    def test_sta_names_units_precision_and_zero(self):
+        cache = Cache(5000)
+        for i, value in enumerate((3010, 4920, 3515, 1262)):
+            cache.update(i, value)
+        self.assertEqual(cache.reply(), '+STA:NPU_TEMP=30.10C,NPU_POWER=4.920W,RK_TEMP=35.15C,VIN12_CURRENT=1262mA')
+        for i, value in enumerate((-1, 1, -1234, 0)):
+            cache.update(i, value)
+        self.assertEqual(cache.reply(), '+STA:NPU_TEMP=-0.01C,NPU_POWER=0.001W,RK_TEMP=-12.34C,VIN12_CURRENT=0mA')
 
     def test_houmo_selected_card_and_ambiguous_power(self):
         text = '''device0 detail infos

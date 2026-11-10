@@ -66,16 +66,34 @@ class LinuxTests(unittest.TestCase):
                 try:
                     time.sleep(.4)
                     started=time.monotonic()
-                    self.assertEqual(ask(b'AT+STA\r\n'), ['+STA:-,-,3700,1200'])
+                    self.assertEqual(ask(b'AT+STA\r\n'), ['+STA:NPU_TEMP=-,NPU_POWER=-,RK_TEMP=37.00C,VIN12_CURRENT=1200mA'])
                     self.assertLess(time.monotonic()-started,.5)
                     other=subprocess.run([sys.executable,'-m','gs422.service','--config',str(config)],cwd=ROOT,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=3)
                     self.assertNotEqual(other.returncode,0)
-                    self.assertEqual(ask(b'AT+STA\n'*40,40), ['+STA:-,-,3700,1200']*40)
+                    self.assertEqual(ask(b'AT+STA\n'*40,40), ['+STA:NPU_TEMP=-,NPU_POWER=-,RK_TEMP=37.00C,VIN12_CURRENT=1200mA']*40)
                     self.assertEqual(ask(b'x'*513+b'\nAT+BOGUS\nAT+WIFI=x,short\n',3), ['ERROR','ERROR','+WIFI:ERR'])
                     current.write_text('bad'); time.sleep(.7)
-                    self.assertEqual(ask(b'AT+STA\n'), ['+STA:-,-,3700,-'])
+                    self.assertEqual(ask(b'AT+STA\n'), ['+STA:NPU_TEMP=-,NPU_POWER=-,RK_TEMP=37.00C,VIN12_CURRENT=-'])
                     current.write_text('0'); time.sleep(.25)
-                    self.assertEqual(ask(b'AT+STA?\n'), ['+STA:-,-,3700,0'])
+                    self.assertEqual(ask(b'AT+STA?\n'), ['+STA:NPU_TEMP=-,NPU_POWER=-,RK_TEMP=37.00C,VIN12_CURRENT=0mA'])
+                    # CPU query must not sleep for a new usage window or wait for the slow NPU.
+                    time.sleep(1.1)
+                    # TTL .5s is shorter than the CPU cadence; wait for a fresh snapshot.
+                    deadline=time.monotonic()+2
+                    while True:
+                        started=time.monotonic()
+                        cpu=ask(b'AT+CPU\r\n')[0]
+                        self.assertLess(time.monotonic()-started,.5)
+                        if not cpu.startswith('+CPU:USAGE=-') or time.monotonic()>=deadline:
+                            break
+                        time.sleep(.1)
+                    self.assertRegex(cpu,r'^\+CPU:USAGE=\d+\.\d%,IOWAIT=\d+\.\d%')
+                    self.assertIn('TEMP=37.00C',cpu)
+                    self.assertIn('WINDOW_MS=',cpu)
+                    replies=ask(b'AT+CPU?\nAT+STA\nAT+CPU=1\n',3)
+                    self.assertTrue(replies[0].startswith('+CPU:'))
+                    self.assertTrue(replies[1].startswith('+STA:'))
+                    self.assertEqual(replies[2],'ERROR')
                 finally:
                     process.terminate()
                     try: process.wait(timeout=5)

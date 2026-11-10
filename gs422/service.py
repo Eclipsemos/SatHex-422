@@ -1,5 +1,6 @@
 """Serial event loop, three independent collectors and bounded command workers."""
 import argparse
+import json
 import logging
 import os
 import queue
@@ -7,10 +8,13 @@ import select
 import signal
 import threading
 import time
+import sys
+from pathlib import Path
 from . import __version__
 from .core import Cache, Config, Framer, parse, parse_smi, scaled
 from .network import NMClient
 from .platform import Reader, Serial, interfaces, ipv4
+from .cpu import CPUCache
 
 LOG = logging.getLogger("gs422")
 
@@ -37,7 +41,7 @@ class Worker:
             except queue.Empty:
                 continue
             try:
-                prefix = "WIFI" if kind == "SET_WIFI" else kind
+                prefix = "WIFI" if kind == "SET_WIFI" else 'DOCKER' if kind.startswith('DOCKER') else kind
                 if self.stop.is_set():
                     continue
                 if time.monotonic() - entered >= 5:
@@ -72,6 +76,7 @@ class Service:
         self.stop = threading.Event()
         self.failed = False
         self.cache = Cache(config.cache_ttl_ms)
+        self.cpu = CPUCache(config.cache_ttl_ms)
         self.tx = queue.Queue(512)
         self.serial = None
         self.threads = []
@@ -114,6 +119,26 @@ class Service:
                 previous = state
             self.stop.wait(c.sample_interval_ms / 1000)
 
+    def collect_cpu(self):
+        reader = Reader(self.stop)
+        previous = None
+        while not self.stop.is_set():
+            started = time.monotonic()
+            ok = False
+            try:
+                text = reader.read([sys.executable, str(Path(__file__).with_name('cpu.py'))], 2)
+                if text is not None:
+                    self.cpu.update(json.loads(text))
+                    ok = True
+            except (OSError, ValueError, KeyError, TypeError):
+                pass
+            if not ok:
+                self.cpu.failed()
+            if ok != previous:
+                LOG.info('SAMPLE source=CPU valid=%d', ok)
+                previous = ok
+            self.stop.wait(max(.1, 1 - (time.monotonic() - started)))
+
     def network(self, kind, args):
         mapping = interfaces(self.config)
         if kind in ("IP1", "IP2"):
@@ -122,6 +147,22 @@ class Service:
         if kind == "WIFI":
             return client.query(mapping["WIFI"])
         return client.connect(mapping["WIFI"], *args)
+
+    def docker(self, kind, args):
+        # Reader's overall deadline also protects against slow/trickling daemon replies.
+        # Retain one Reader per worker to avoid multiplying a kernel-stuck helper.
+        if not hasattr(self.docker_local, 'reader'):
+            self.docker_local.reader = Reader(self.stop)
+        argv = [sys.executable, str(Path(__file__).with_name('docker.py')),
+                '--socket', self.config.docker_socket, '--allow', self.config.docker_allow,
+                *args]
+        result = self.docker_local.reader.read(argv, 22 if kind == 'DOCKER_CONTROL' else 10, 4096)
+        if result is None:
+            return '+DOCKER:ERR,' + ('OUTCOME_UNKNOWN' if kind == 'DOCKER_CONTROL' else 'TIMEOUT')
+        result = result.rstrip('\n')
+        if not result.startswith('+DOCKER:') or '\n' in result or '\r' in result:
+            return '+DOCKER:ERR,INVALID_RESPONSE'
+        return result
 
     def transmit(self):
         while not self.stop.is_set():
@@ -161,11 +202,15 @@ class Service:
         try:
             for kind, indices in (("NPU", (0, 1)), ("SOC", (2,)), ("CURRENT", (3,))):
                 self.start_thread(self.collect, kind, indices)
+            self.start_thread(self.collect_cpu)
             self.start_thread(self.transmit)
             ip = Worker(2, 128, self.stop, self.emit, self.network)
             wifi = Worker(1, 32, self.stop, self.emit, self.network)
             setting = Worker(1, 1, self.stop, self.emit, self.network)
-            self.workers = [ip, wifi, setting]
+            self.docker_local = threading.local()
+            docker_query = Worker(1, 8, self.stop, self.emit, self.docker)
+            docker_control = Worker(1, 1, self.stop, self.emit, self.docker)
+            self.workers = [ip, wifi, setting, docker_query, docker_control]
             framing = Framer()
             LOG.info("READY version=%s baud=9600 cache_ttl_ms=%d", __version__, self.config.cache_ttl_ms)
             while not self.stop.is_set():
@@ -183,10 +228,18 @@ class Service:
                     LOG.info("RX_COMMAND kind=%s", kind)
                     if kind == "STA":
                         self.emit(self.cache.reply())
+                    elif kind == "CPU":
+                        self.emit(self.cpu.reply(self.cache.value(2)))
                     elif kind == "ERROR":
                         self.emit("ERROR")
                     elif kind == "WIFI_ERR":
                         self.emit("+WIFI:ERR")
+                    elif kind == 'DOCKER_ERR':
+                        self.emit('+DOCKER:ERR,BAD_COMMAND')
+                    elif kind in ('DOCKER', 'DOCKER_CONTROL'):
+                        worker = docker_control if kind == 'DOCKER_CONTROL' else docker_query
+                        if not worker.submit(kind, args):
+                            self.emit('+DOCKER:ERR,BUSY')
                     else:
                         worker = ip if kind in ("IP1", "IP2") else setting if kind == "SET_WIFI" else wifi
                         if not worker.submit(kind, args):

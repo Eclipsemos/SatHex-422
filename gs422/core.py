@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import threading
 import time
+from .docker import parse_command as parse_docker, target_valid
 
 
 @dataclass
@@ -23,6 +24,8 @@ class Config:
     cache_ttl_ms: int = 5000
     sample_interval_ms: int = 1000
     sensor_timeout_ms: int = 2000
+    docker_socket: str = "/var/run/docker.sock"
+    docker_allow: str = ""
 
     @classmethod
     def read(cls, path):
@@ -45,12 +48,14 @@ class Config:
                                ("sensor_timeout_ms", 100, 10000)):
             if not low <= getattr(c, key) <= high:
                 raise ValueError("configuration out of range: " + key)
-        for key in ("port", "smi", "soc_temp_path", "current_path"):
+        for key in ("port", "smi", "soc_temp_path", "current_path", "docker_socket"):
             value = getattr(c, key)
             if (value and not value.startswith("/")) or any(ord(x) < 32 for x in value):
                 raise ValueError("invalid path: " + key)
         if not c.port or not c.smi:
             raise ValueError("port and smi required")
+        if not c.docker_socket or any(not target_valid(x) for x in c.docker_allow.split(';') if x):
+            raise ValueError('invalid Docker configuration')
         for key in ("ethernet1", "ethernet2", "wifi"):
             if not re.fullmatch(r"[a-zA-Z0-9_.:-]{1,15}", getattr(c, key)):
                 raise ValueError("invalid interface")
@@ -119,7 +124,16 @@ def parse(frame):
         line = frame.decode("utf-8", errors="strict")
     except UnicodeDecodeError:
         return "ERROR", None
-    for command in ("STA", "IP1", "IP2", "WIFI"):
+    if line.startswith('AT+DOCKER'):
+        try:
+            command = parse_docker(line)
+            if command:
+                kind = 'DOCKER_CONTROL' if command[0] in ('START','STOP','RESTART') else 'DOCKER'
+                return kind, command
+        except ValueError:
+            return 'DOCKER_ERR', None
+        return 'ERROR', None
+    for command in ("STA", "CPU", "IP1", "IP2", "WIFI"):
         if line in ("AT+" + command, "AT+" + command + "?"):
             return command, None
     if line.startswith("AT+WIFI="):
@@ -182,9 +196,21 @@ class Cache:
             with self.lock:
                 self.values[index] = (value, self.clock())
 
+    def value(self, index):
+        with self.lock:
+            value = self.values[index]
+            return value[0] if value is not None and 0 <= self.clock() - value[1] < self.ttl else None
+
     def reply(self):
         with self.lock:
             now = self.clock()
-            values = [str(v[0]) if v is not None and 0 <= now - v[1] < self.ttl else "-"
+            values = [v[0] if v is not None and 0 <= now - v[1] < self.ttl else None
                       for v in self.values]
-        return "+STA:" + ",".join(values)
+        # Collectors retain integer centi-Celsius / mW / mA; only wire display changes.
+        fields = (("NPU_TEMP", 2, "C"), ("NPU_POWER", 3, "W"),
+                  ("RK_TEMP", 2, "C"), ("VIN12_CURRENT", 0, "mA"))
+        result = []
+        for value, (name, decimals, unit) in zip(values, fields):
+            display = "-" if value is None else f"{Decimal(value).scaleb(-decimals):.{decimals}f}{unit}"
+            result.append(name + "=" + display)
+        return "+STA:" + ",".join(result)

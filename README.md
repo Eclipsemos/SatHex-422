@@ -1,10 +1,26 @@
 # SatHex-422：自主串口服务 gs422
 
 独立实现 `shanhe-serial 0.2.2` 的串口功能：STA、IP1、IP2、WIFI 查询及配网。
+另支持 `AT+CPU` / `AT+CPU?`：后台约 1 秒采样的整机/各核使用率、IO 等待、系统负载、
+各核心组频率、SoC 温度、在线核心数和实际采样窗口。
 Python 3.10+，Linux ARM64；不需要旧源码，不包含旧厂商代码。底层仍依赖系统驱动、
 后摩 `hm_smi` 和 NetworkManager。当前不含 HOUMO、SDR 等新指令。
 
-完整协议和边界见 [docs/PROTOCOL.md](docs/PROTOCOL.md)。
+所有 AT 命令统一查阅 **[AT 命令使用手册](docs/AT-COMMANDS.md)**：包含语法、
+返回字段、单位、示例、错误码和 Docker 控制配置。
+实现细节和协议边界另见 [docs/PROTOCOL.md](docs/PROTOCOL.md)。
+
+当前版本 **2.2.0**：新增 Docker 状态、容器/镜像分页列表、详情、资源查询，
+以及白名单内已有容器的启动、停止和重启。白名单默认留空，详见
+[Docker 指令与控制配置](docs/DOCKER.md)。保留 CPU 查询和 STA 名称及单位，示例：
+
+```text
++STA:NPU_TEMP=30.10C,NPU_POWER=4.920W,RK_TEMP=35.15C,VIN12_CURRENT=1262mA
+```
+
+分别为 NPU 温度、NPU 功耗、RK3588 温度、12V 电流。C 表示摄氏度，缺失值为 `-`。
+这与 1.0.0 的四个纯数字格式不兼容，接收端需同步调整；IP/WIFI 等回复不变。
+传感器配置中的除数无需修改。
 
 ## 开发与测试
 
@@ -18,7 +34,8 @@ python3 deploy/build_deb.py
 ```
 
 `tests/compare_legacy.py` 在独立 PTY 上比较新旧程序，使用固定传感器数据和真实只读
-网络查询，不占用物理 UART；须先安装原 shanhe-serial。
+网络查询，不占用物理 UART；须先安装原 shanhe-serial。STA 按新格式和相同物理量
+核对，其他命令要求回复一致。
 
 `tests/live_wifi.py --allow-wifi-interruption` 会断开并重连 Wi-Fi，只能在有线管理
 连接上以 root 显式运行。复用现有连接凭据但不打印密码，结束时恢复原 profile 并清理
@@ -40,11 +57,11 @@ current_divisor=1
 
 ## 安装与切换
 
-生成 `dist/gs422_1.0.0_all.deb`，纯 Python 包标记为 all，可在 ARM64 运行。包安装
+生成 `dist/gs422_2.2.0_all.deb`，纯 Python 包标记为 all，可在 ARM64 运行。包安装
 只注册服务，不自动占用现场串口。验证配置后切换：
 
 ```sh
-sudo dpkg -i dist/gs422_1.0.0_all.deb
+sudo dpkg -i dist/gs422_2.2.0_all.deb
 sudo cp /etc/shanhe-serial.conf /etc/gs422.conf
 sudo systemctl disable --now rs422.service shanhe-serial.service
 sudo systemctl enable --now gs422.service
@@ -53,6 +70,9 @@ sudo journalctl -u gs422.service -n 30 --no-pager
 
 新服务与旧服务声明互斥，使用串口文件锁及 TIOCEXCL。旧安装包、程序和配置保留。
 没有硬编码 ttyS6 的 systemd 条件，改 port 后重启服务即可。
+
+从已安装的 gs422 升级时保留 `/etc/gs422.conf`，不要重新复制旧配置；安装后执行
+`sudo systemctl restart gs422.service` 以加载新代码。
 
 回退：
 
@@ -64,6 +84,8 @@ sudo systemctl enable --now shanhe-serial.service
 ## 代码结构
 
 - `gs422/core.py`：配置、协议、分帧、单位换算、缓存。
+- `gs422/cpu.py`：CPU 计数差分、调频域、负载、缓存及只读采样子进程。
+- `gs422/docker.py`：Docker Engine 本地 socket 查询、分页、容器控制白名单。
 - `gs422/platform.py`：串口、网卡、IPv4、受控子进程。
 - `gs422/network.py`：NetworkManager 查询、配网、持久化、回滚。
 - `gs422/service.py`：采集线程、查询队列、串口收发、生命周期。

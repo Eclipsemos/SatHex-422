@@ -1,4 +1,4 @@
-"""Read-only hardware / PTY differential check; never sends Wi-Fi settings."""
+"""PTY comparison: STA v2 intentional format change, other replies unchanged."""
 import os
 from pathlib import Path
 import pty
@@ -54,6 +54,11 @@ if __name__=='__main__':
     new=exercise(command,config,commands)
     failures=0
     for cmd,a,b in zip(commands,old,new):
-        print(repr(cmd[:50]),'OLD:',a,'NEW:',b,'MATCH:',a==b)
-        failures+=a!=b
+        if cmd in (b'AT+STA', b'AT+STA?'):
+            passed = (a == '+STA:3010,4920,3515,1262' and
+                      b == '+STA:NPU_TEMP=30.10C,NPU_POWER=4.920W,RK_TEMP=35.15C,VIN12_CURRENT=1262mA')
+        else:
+            passed = a == b
+        print(repr(cmd[:50]),'OLD:',a,'NEW:',b,'PASS:',passed)
+        failures+=not passed
     raise SystemExit(bool(failures))
