@@ -15,6 +15,8 @@ from .core import Cache, Config, Framer, parse, parse_smi, scaled
 from .network import NMClient
 from .platform import Reader, Serial, interfaces, ipv4
 from .cpu import CPUCache
+from .ip_admin import IPAdmin
+from .ssh_admin import SSHAdmin
 
 LOG = logging.getLogger("gs422")
 
@@ -41,7 +43,7 @@ class Worker:
             except queue.Empty:
                 continue
             try:
-                prefix = "WIFI" if kind == "SET_WIFI" else 'DOCKER' if kind.startswith('DOCKER') else kind
+                prefix = "WIFI" if kind == "SET_WIFI" else 'DOCKER' if kind.startswith('DOCKER') else kind.removesuffix('_ADMIN')
                 if self.stop.is_set():
                     continue
                 if time.monotonic() - entered >= 5:
@@ -81,6 +83,8 @@ class Service:
         self.serial = None
         self.threads = []
         self.workers = []
+        self.ip_admin = IPAdmin(self.stop)
+        self.ssh_admin = SSHAdmin()
 
     def emit(self, reply):
         if self.stop.is_set():
@@ -143,6 +147,11 @@ class Service:
         mapping = interfaces(self.config)
         if kind in ("IP1", "IP2"):
             return "+" + kind + ":" + ",".join(ipv4(mapping[kind]))
+        if kind.endswith('_ADMIN'):
+            label = kind.removesuffix('_ADMIN')
+            return self.ip_admin.execute(label, mapping[label], args)
+        if kind == 'SET_WIFI' and self.ip_admin.busy():
+            return '+WIFI:ERR,BUSY'
         client = NMClient(self.stop, self.config.wifi_timeout if kind == "SET_WIFI" else 5)
         if kind == "WIFI":
             return client.query(mapping["WIFI"])
@@ -163,6 +172,16 @@ class Service:
         if not result.startswith('+DOCKER:') or '\n' in result or '\r' in result:
             return '+DOCKER:ERR,INVALID_RESPONSE'
         return result
+
+    def storage(self, kind, page):
+        result = self.storage_reader.read(
+            [sys.executable, str(Path(__file__).with_name('storage.py')), str(page)], 8, 8192)
+        if result is None:
+            return '+DISK:ERR,TIMEOUT'
+        lines = result.rstrip('\n').split('\n')
+        if not lines or any(not line.startswith('+DISK:') or '\r' in line for line in lines):
+            return '+DISK:ERR,INVALID_RESPONSE'
+        return '\r\n'.join(lines)
 
     def transmit(self):
         while not self.stop.is_set():
@@ -210,7 +229,10 @@ class Service:
             self.docker_local = threading.local()
             docker_query = Worker(1, 8, self.stop, self.emit, self.docker)
             docker_control = Worker(1, 1, self.stop, self.emit, self.docker)
-            self.workers = [ip, wifi, setting, docker_query, docker_control]
+            ssh = Worker(1, 1, self.stop, self.emit, lambda kind, args: self.ssh_admin.execute(args))
+            self.storage_reader = Reader(self.stop)
+            storage = Worker(1, 1, self.stop, self.emit, self.storage)
+            self.workers = [ip, wifi, setting, docker_query, docker_control, ssh, storage]
             framing = Framer()
             LOG.info("READY version=%s baud=9600 cache_ttl_ms=%d", __version__, self.config.cache_ttl_ms)
             while not self.stop.is_set():
@@ -236,6 +258,19 @@ class Service:
                         self.emit("+WIFI:ERR")
                     elif kind == 'DOCKER_ERR':
                         self.emit('+DOCKER:ERR,BAD_COMMAND')
+                    elif kind in ('IP1_ERR', 'IP2_ERR', 'SSH_ERR'):
+                        self.emit('+' + kind.removesuffix('_ERR') + ':ERR,BAD_COMMAND')
+                    elif kind == 'DISK_ERR':
+                        self.emit('+DISK:ERR,BAD_COMMAND')
+                    elif kind == 'DISK':
+                        if not storage.submit(kind, args):
+                            self.emit('+DISK:ERR,BUSY')
+                    elif kind == 'SSH':
+                        if not ssh.submit(kind, args):
+                            self.emit('+SSH:ERR,BUSY')
+                    elif kind.endswith('_ADMIN'):
+                        if not setting.submit(kind, args):
+                            self.emit('+' + kind.removesuffix('_ADMIN') + ':ERR,BUSY')
                     elif kind in ('DOCKER', 'DOCKER_CONTROL'):
                         worker = docker_control if kind == 'DOCKER_CONTROL' else docker_query
                         if not worker.submit(kind, args):
@@ -249,6 +284,10 @@ class Service:
             self.stop.set()
             for worker in self.workers:
                 worker.join()
+            try:
+                self.ip_admin.rollback()
+            except Exception:
+                LOG.warning('NETWORK_ROLLBACK_FAILED')
             for thread in self.threads:
                 thread.join(timeout=4)
             self.serial.close()

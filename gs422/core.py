@@ -6,6 +6,7 @@ import re
 import threading
 import time
 from .docker import parse_command as parse_docker, target_valid
+from .admin_protocol import ip_arguments, ssh_arguments
 
 
 @dataclass
@@ -124,6 +125,26 @@ def parse(frame):
         line = frame.decode("utf-8", errors="strict")
     except UnicodeDecodeError:
         return "ERROR", None
+    for label in ('IP1', 'IP2'):
+        if line.startswith('AT+' + label + '='):
+            try:
+                return label + '_ADMIN', ip_arguments(line.split('=', 1)[1])
+            except ValueError:
+                return label + '_ERR', None
+    if line in ('AT+SSH', 'AT+SSH?'):
+        return 'SSH', ('QUERY',)
+    if line.startswith('AT+SSH='):
+        try:
+            return 'SSH', ssh_arguments(line.split('=', 1)[1])
+        except ValueError:
+            return 'SSH_ERR', None
+    if line in ('AT+DISK', 'AT+DISK?'):
+        return 'DISK', 0
+    if line.startswith('AT+DISK='):
+        page = line.split('=', 1)[1]
+        if re.fullmatch(r'[0-9]{1,3}', page):
+            return 'DISK', int(page)
+        return 'DISK_ERR', None
     if line.startswith('AT+DOCKER'):
         try:
             command = parse_docker(line)

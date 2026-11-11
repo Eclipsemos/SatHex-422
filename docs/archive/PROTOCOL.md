@@ -1,6 +1,6 @@
 # RS422 protocol, revision 4 (gs422 2.2.0)
 
-完整中文使用说明：[全部 AT 命令手册](AT-COMMANDS.md)。
+完整中文使用说明：[全部 AT 命令手册](../AT-COMMANDS.md)。
 
 Independent implementation derived from the shanhe-serial 0.2.2 documented wire
 protocol. Revision 2 intentionally replaces the STA numeric tuple with labeled,

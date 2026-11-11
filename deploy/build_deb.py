@@ -18,16 +18,16 @@ with tempfile.TemporaryDirectory(prefix="gs422-package-") as tmp:
     launcher.chmod(0o755)
     shutil.copyfile(root / "config/gs422.conf", stage / "etc/gs422.conf")
     shutil.copyfile(root / "deploy/gs422.service", stage / "lib/systemd/system/gs422.service")
-    for name in ("README.md", "docs/PROTOCOL.md", "docs/DOCKER.md", "docs/AT-COMMANDS.md"):
-        shutil.copyfile(root / name, stage / "usr/share/doc/gs422" / pathlib.Path(name).name)
+    shutil.copyfile(root / "README.md", stage / "usr/share/doc/gs422/README.md")
+    shutil.copytree(root / "docs", stage / "usr/share/doc/gs422/docs")
     (stage / "DEBIAN/control").write_text('''Package: gs422
-Version: 2.2.0
+Version: 2.4.0
 Architecture: all
 Maintainer: Gansuan Development
 Section: admin
 Priority: optional
-Depends: python3 (>= 3.10), python3-gi, gir1.2-glib-2.0, network-manager (>= 1.22), systemd
-Description: Independent RS422 telemetry and Wi-Fi service
+Depends: python3 (>= 3.10), python3-gi, gir1.2-glib-2.0, network-manager (>= 1.22), systemd, iproute2, util-linux (>= 2.37)
+Description: Independent RS422 telemetry, network and SSH administration
 ''')
     (stage / "DEBIAN/conffiles").write_text('/etc/gs422.conf\n')
     for name, content in {
@@ -38,7 +38,7 @@ Description: Independent RS422 telemetry and Wi-Fi service
         p = stage / "DEBIAN" / name
         p.write_text('#!/bin/sh\nset -e\n' + content)
         p.chmod(0o755)
-    target = dist / "gs422_2.2.0_all.deb"
+    target = dist / "gs422_2.4.0_all.deb"
     # Do not inherit a Windows checkout's modes or the builder's umask (or tmp 0700).
     stage.chmod(0o755)
     for p in stage.rglob('*'):

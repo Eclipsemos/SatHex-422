@@ -18,6 +18,8 @@ LimitCORE=0
 NoNewPrivileges=true
 ProtectHome=true
 ProtectSystem=strict
+# OpenSSH drop-in and runtime validator directory. Network profiles use D-Bus.
+ReadWritePaths=-/etc/ssh/sshd_config.d /run
 PrivateTmp=true
 RestrictSUIDSGID=true
 LockPersonality=true

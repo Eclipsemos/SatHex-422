@@ -23,7 +23,7 @@ class NMClient:
         self.deadline = time.monotonic() + timeout
         self.cleaning = False
 
-    def call(self, path, interface, method, signature=None, args=()):
+    def call(self, path, interface, method, signature=None, args=(), raw=False):
         remaining = self.deadline - time.monotonic()
         if remaining <= 0 or (self.stop.is_set() and not self.cleaning):
             raise TimeoutError("operation cancelled or expired")
@@ -31,7 +31,7 @@ class NMClient:
                                    self.GLib.Variant(signature, args) if signature else None,
                                    None, self.Gio.DBusCallFlags.NONE,
                                    max(1, min(3000, int(remaining * 1000))), None)
-        return result.unpack()
+        return result if raw else result.unpack()
 
     def get(self, path, interface, prop):
         return self.call(path, PROPS, "Get", "(ss)", (interface, prop))[0]

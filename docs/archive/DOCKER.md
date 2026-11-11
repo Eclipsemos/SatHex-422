@@ -1,6 +1,6 @@
 # Docker commands (gs422 2.2.0)
 
-所有 AT 命令（含本页 Docker 功能）已统一收录到 [AT 命令使用手册](AT-COMMANDS.md)。
+所有 AT 命令（含本页 Docker 功能）已统一收录到 [AT 命令使用手册](../AT-COMMANDS.md)。
 
 通过本机 Docker Engine Unix socket 读取信息，不依赖 Docker Python SDK，
 不执行串口提供的 shell。请求/响应使用协议规定的 CRLF。
