@@ -1,6 +1,6 @@
 # 当前可测试的 AT 命令
 
-适用版本：gs422 2.4.0。串口设置 **9600 / 8N1 / 无流控**，发送时加 **CRLF**。
+适用版本：gs422 2.5.0。串口设置 **9600 / 8N1 / 无流控**，发送时加 **CRLF**。
 命令使用大写，一次发一条，收到回复后再发下一条。
 
 ## 直接查询
@@ -9,6 +9,7 @@
 
 | 命令 | 查看什么 |
 |---|---|
+| `AT+SDR` / `AT+SDR?` | 最近一次 SDR 采集/解码任务的状态 |
 | `AT+STA` | NPU 温度（C）、NPU 功耗（W）、RK 温度（C）、12V 电流（mA） |
 | `AT+CPU` | CPU 总使用率、各核使用率、IO 等待、1/5/15 分钟负载、核心数、频率、温度 |
 | `AT+DISK` / `AT+DISK?` | 磁盘列表、容量及各文件系统的挂载位置、总量、已用、可用、使用率 |
@@ -145,6 +146,58 @@ docker_allow=my-worker;another-worker
 修改已有配置项后，在 SSH 终端执行 `sudo systemctl restart gs422` 生效。
 只支持已有容器的启停；不支持创建、删除、拉取镜像或执行容器内命令。
 
+## SDR 采集与解码任务
+
+135 已部署 `gs422-sdr.service` 后台任务服务。422 只负责下发命令和查询，采集/解码在后台运行；一次只允许一个任务，不阻塞 STA/CPU 等查询。任务是先采后解，不是连续实时流。
+
+先测试 NR，按顺序发送，每条收到回复后再发下一条：
+
+```text
+AT+SDR=PRESET,NR
+AT+SDR=CONFIG
+AT+SDR=START
+AT+SDR=STATUS
+AT+SDR=RESULT
+```
+
+START 立即返回任务 ID，例如 `+SDR:START,ID=abcdef123456,STATE=CHECKING`。STATUS 按需每 1～2 秒查询，等待 `DONE` 后读取 RESULT。示例 ID 需替换为实际返回值。
+
+| 命令 | 操作 |
+|---|---|
+| `AT+SDR` / `AT+SDR?` / `AT+SDR=STATUS` | 查询最近任务；尚无任务时 ID=-、STATE=IDLE |
+| `AT+SDR=PRESET,NR` | 2130.15 MHz、4 MS/s、4 MHz 带宽、500 ms、增益45 dB、channel 0、NR 广播 |
+| `AT+SDR=PRESET,LTE` | 1815 MHz、2 MS/s、2 MHz 带宽、300 ms、增益45 dB、channel 0、LTE 广播 |
+| `AT+SDR=PRESET,LTE_DCI` | 1815 MHz、20 MS/s、20 MHz 带宽、120 ms、增益45 dB、channel 0、100 PRB LTE DCI |
+| `AT+SDR=CONFIG` | 查询当前任务参数；设置会保存，服务重启后保留 |
+| `AT+SDR=START` | 使用当前参数创建新任务，返回12位十六进制 ID |
+| `AT+SDR=STATUS,abcdef123456` | 查询指定任务状态、技术、耗时和错误码 |
+| `AT+SDR=RESULT,abcdef123456` | 查询指定任务结果摘要 |
+| `AT+SDR=STOP,abcdef123456` | 请求停止指定活动任务；应继续查询直到 CANCELLED/FAILED |
+| `AT+SDR=STOP` / `AT+SDR=RESULT` | 操作/查询最近任务 |
+
+自定义参数顺序为：
+
+```text
+AT+SDR=CONFIG,技术,频率Hz,采样率SPS,带宽Hz,时长ms,增益dB,通道,阶段,PRB
+AT+SDR=CONFIG,NR,2130150000,4000000,4000000,500,45,1,BROADCAST,100
+```
+
+上例切换到 channel 1。UHD 逻辑天线固定为 RX2；它与面板的 RX1/RX2 标签不是同一参数。技术为 LTE/NR，阶段为 BROADCAST/DCI；**NR 仅允许 BROADCAST，并固定使用 15 kHz SSB 配置**。频率须对准目标载波中心/SSB，换频率不等于自动搜索或支持所有 NR 频段。
+
+本轮现场 NR 在 channel1 解出 PCI690；LTE广播在 channel0 解出 PCI402。LTE_DCI预设本轮发生一次 RX overflow，会返回 CAPTURE_FAILED，不能保证高采样率稳定。
+
+数字均为整数。允许频率70 MHz～6 GHz、采样率1～20 MS/s、带宽1 MHz～采样率、时长50～2000 ms、增益0～76 dB、通道0/1；实际硬件不接受参数、出现溢出或时间不连续时任务失败。NR 带宽至少4 MHz。LTE DCI 的带宽必须覆盖 PRB 对应名义载波带宽；PRB 允许6/15/25/50/75/100，广播阶段实际只解中心6 PRB。范围是参数校验边界，不代表所有组合都已实测；建议从预设开始。
+
+状态：`CHECKING → CAPTURING → DECODING → DONE`。取消中为 STOPPING，结束为 CANCELLED；错误为 FAILED；异常重启留下的未完成任务为 INTERRUPTED，不自动重跑。进度按阶段与耗时报告，不估算百分比。重启422服务不会停止后台任务，关闭任务服务会取消活动任务。
+
+RESULT 字段：TECH、DETECTED、CELLS、PCI、PCI_MORE、PBCH、MIB、DCI。PCI 多个值用分号，最多列8个，超出时 PCI_MORE=1。NR 的 PBCH/MIB 是日志解码事件数；LTE 的 PBCH/MIB 显示 `-`，使用 CELLS 表示确认的小区数。DCI 是调度记录数。**DONE 只表示流程正常结束；DETECTED=0 是未确认小区，不能当作解码成功或无信号的证明。** 失败或取消仅返回状态和错误，不把中途产生的部分结果标成成功。
+
+结果保存在 `/media/hzx/ssd/gs422-tasks/<ID>/`，包含 `task.json`、capture 下的 IQ/manifest、decode 下的配置/日志/JSONL。串口返回摘要，不传大 IQ。文件不自动删除；SSD未挂载或空闲不足2 GiB时拒绝采集，旧任务可通过 ID 查询。新任务不会覆盖旧任务。
+
+常见错误：BAD_COMMAND 参数错误；BUSY 已有活动任务/请求队列满；NO_TASK 未找到任务；UNAVAILABLE 后台服务不可达；SSD_NOT_MOUNTED、NO_SPACE、DEVICE_MISSING、UHD_MISSING、SOFTWARE_MISSING、IMAGE_MISSING、IMAGE_ARCH 表示前置条件不足；CAPTURE_FAILED、DECODE_FAILED、TIMEOUT 需查任务日志；CLEANUP_FAILED 表示容器清理未确认，阻止新任务，处理后台服务日志后重启。
+
+后台服务的本机路径与镜像配置位于 `/etc/gs422-sdr.json`，不通过串口修改。Docker 白名单只针对 `AT+DOCKER` 的人工容器控制；SDR 服务独立启动指定算法镜像，不执行串口传入的 shell、镜像名或文件路径。
+
 ## 192.168.5.28 历史测试注意事项
 
 以下为 2026-11-10 实测状态，接线或硬件变化后以实时回复为准：
@@ -183,7 +236,7 @@ docker_allow=my-worker;another-worker
 | `+DOCKER:ERR,BUSY` | 正在处理其他请求，稍后再试 |
 | `+DOCKER:ERR,OUTCOME_UNKNOWN` | 控制结果不确定，先查 INFO，不要直接重复启停 |
 
-HOUMO、IO、SDR、MEM、PWR、THERM、UPTIME、ID、VER、CAP、TIME、HELP
+HOUMO、IO、MEM、PWR、THERM、UPTIME、ID、VER、CAP、TIME、HELP
 尚未实现。当前全部可测试命令已列在上面。
 
 详细字段说明、协议和历史验证记录保存在 [archive](archive/)，日常测试看本页即可。

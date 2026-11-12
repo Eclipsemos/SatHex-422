@@ -17,6 +17,7 @@ from .platform import Reader, Serial, interfaces, ipv4
 from .cpu import CPUCache
 from .ip_admin import IPAdmin
 from .ssh_admin import SSHAdmin
+from .sdr import request as sdr_request
 
 LOG = logging.getLogger("gs422")
 
@@ -232,7 +233,8 @@ class Service:
             ssh = Worker(1, 1, self.stop, self.emit, lambda kind, args: self.ssh_admin.execute(args))
             self.storage_reader = Reader(self.stop)
             storage = Worker(1, 1, self.stop, self.emit, self.storage)
-            self.workers = [ip, wifi, setting, docker_query, docker_control, ssh, storage]
+            sdr = Worker(1, 8, self.stop, self.emit, lambda kind, args: sdr_request(args))
+            self.workers = [ip, wifi, setting, docker_query, docker_control, ssh, storage, sdr]
             framing = Framer()
             LOG.info("READY version=%s baud=9600 cache_ttl_ms=%d", __version__, self.config.cache_ttl_ms)
             while not self.stop.is_set():
@@ -262,6 +264,11 @@ class Service:
                         self.emit('+' + kind.removesuffix('_ERR') + ':ERR,BAD_COMMAND')
                     elif kind == 'DISK_ERR':
                         self.emit('+DISK:ERR,BAD_COMMAND')
+                    elif kind == 'SDR_ERR':
+                        self.emit('+SDR:ERR,BAD_COMMAND')
+                    elif kind == 'SDR':
+                        if not sdr.submit(kind, args):
+                            self.emit('+SDR:ERR,BUSY')
                     elif kind == 'DISK':
                         if not storage.submit(kind, args):
                             self.emit('+DISK:ERR,BUSY')

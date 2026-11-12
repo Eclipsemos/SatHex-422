@@ -4,12 +4,13 @@
 另支持 `AT+CPU` / `AT+CPU?`：后台约 1 秒采样的整机/各核使用率、IO 等待、系统负载、
 各核心组频率、SoC 温度、在线核心数和实际采样窗口。
 Python 3.10+，Linux ARM64；不需要旧源码，不包含旧厂商代码。底层仍依赖系统驱动、
-后摩 `hm_smi` 和 NetworkManager。当前不含 HOUMO、SDR 等新指令。
+后摩 `hm_smi` 和 NetworkManager。支持 AT+SDR 后台采集/解码任务；当前不含 HOUMO、IO 等新指令。
 
 串口测试直接查看 **[当前可测试的 AT 命令](docs/AT-COMMANDS.md)**。
 详细协议及历史验证记录保存在 [docs/archive](docs/archive/)。
 
-当前版本 **2.4.0**：新增 `AT+DISK` 存储列表、整盘容量、挂载位置及文件系统使用量。
+当前版本 **2.5.0**：新增 `AT+SDR` 参数设置、任务启动/取消、阶段查询和 LTE/NR 解码摘要。
+保留 `AT+DISK` 存储列表、整盘容量、挂载位置及文件系统使用量。
 保留有线静态 IPv4/DHCP 配置、确认保存/超时回滚，
 以及 SSH 状态、启停、开机启动和端口设置。保留 Docker 状态、容器/镜像分页列表、详情、资源查询，
 以及白名单内已有容器的启动、停止和重启。白名单默认留空，详见
@@ -47,7 +48,7 @@ python3 deploy/build_deb.py
 需要 root 和 dnsmasq；`tests/live_ssh_admin.py` 使用独立、仅监听回环地址的 SSH 服务。
 `sudo python3 tests/live_storage.py --installed` 用安装后的程序及虚拟串口核对磁盘容量，
 不占用物理 UART。该存储验收脚本针对 135 的 eMMC + NVMe 布局。
-已完成的验证及范围见 [2.4.0 验证记录](docs/archive/VALIDATION-2.4.0.md)。
+存储验收见 [2.4.0 验证记录](docs/archive/VALIDATION-2.4.0.md)，SDR任务验收及限制见 [2.5.0 验证记录](docs/archive/VALIDATION-2.5.0.md)。
 
 ## 配置
 
@@ -65,11 +66,11 @@ current_divisor=1
 
 ## 安装与切换
 
-生成 `dist/gs422_2.4.0_all.deb`，纯 Python 包标记为 all，可在 ARM64 运行。包安装
+生成 `dist/gs422_2.5.0_all.deb`，纯 Python 包标记为 all，可在 ARM64 运行。包安装
 只注册服务，不自动占用现场串口。验证配置后切换：
 
 ```sh
-sudo dpkg -i dist/gs422_2.4.0_all.deb
+sudo dpkg -i dist/gs422_2.5.0_all.deb
 sudo cp /etc/shanhe-serial.conf /etc/gs422.conf
 sudo systemctl disable --now rs422.service shanhe-serial.service
 sudo systemctl enable --now gs422.service
@@ -105,3 +106,17 @@ sudo systemctl enable --now shanhe-serial.service
 - `tests/`：协议、缓存、并发、PTY、对照及现场配网测试。
 
 还需实际 RS422 对端、整机重启及长期运行验收；PTY 不代替物理链路验收。
+
+## SDR 任务服务（135）
+
+需要已部署厂家 UHD、Spaceborne SatHex 工具、Docker 及 LTE/修复版 NR 镜像。包安装不会自动启用 SDR 服务；核对 `/etc/gs422-sdr.json` 中仓库、UHD、SSD 和镜像路径，以及 unit 的 User/Group 后执行：
+
+```sh
+sudo install -d -o hzx -g hzx -m 0750 /media/hzx/ssd/gs422-tasks
+sudo systemctl enable --now gs422-sdr
+sudo systemctl restart gs422
+```
+
+先确认 SSD 已挂载再创建目录。SDR 服务使用 hzx 身份与服务级 docker 附加组，不修改用户全局组；与主串口服务通过 `/run/gs422-sdr/control.sock` 通信。共享 `/tmp` 的按用户采集锁，避免与同用户手动采集重叠。其他不使用此锁的第三方采集程序仍需自行停止。
+
+`gs422/sdr.py` 定义 AT 参数和短请求；`gs422/sdr_tasks.py` 管理单任务、落盘状态、限时进程和容器清理。需要取消时发送 STOP 并等待终态；不会自动重试失败任务。程序不删除任务数据。完整实机 PTY 验证用 `sudo python3 tests/live_sdr.py`，会真实采集 IQ、启动算法容器和重启任务服务，须在无其他任务时显式运行；不会占用生产 UART。

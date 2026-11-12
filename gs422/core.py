@@ -7,6 +7,7 @@ import threading
 import time
 from .docker import parse_command as parse_docker, target_valid
 from .admin_protocol import ip_arguments, ssh_arguments
+from .sdr import parse_command as parse_sdr
 
 
 @dataclass
@@ -125,6 +126,11 @@ def parse(frame):
         line = frame.decode("utf-8", errors="strict")
     except UnicodeDecodeError:
         return "ERROR", None
+    if line.startswith('AT+SDR'):
+        try:
+            return 'SDR', parse_sdr(line)
+        except ValueError:
+            return 'SDR_ERR', None
     for label in ('IP1', 'IP2'):
         if line.startswith('AT+' + label + '='):
             try:

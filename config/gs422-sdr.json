@@ -1,0 +1,11 @@
+{
+  "socket": "/run/gs422-sdr/control.sock",
+  "mount": "/media/hzx/ssd",
+  "output_root": "/media/hzx/ssd/gs422-tasks",
+  "repo": "/home/hzx/spaceborne/code/Spaceborne",
+  "uhd_root": "/home/hzx/sdr/managed/uhd-4.8.0.0",
+  "images": {
+    "LTE": "spaceborne-4gapp:1.2.0-prep.2",
+    "NR": "spaceborne-5gapp:sathex-syncfix-20261112"
+  }
+}

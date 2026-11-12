@@ -1,0 +1,34 @@
+[Unit]
+Description=SatHex SDR capture and decode task broker
+After=docker.service m2sdr-driver.service
+Requires=docker.service
+RequiresMountsFor=/media/hzx/ssd
+ConditionPathExists=/etc/gs422-sdr.json
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=hzx
+Group=hzx
+SupplementaryGroups=docker
+ExecStart=/usr/bin/gs422-sdr --config /etc/gs422-sdr.json
+RuntimeDirectory=gs422-sdr
+RuntimeDirectoryMode=0750
+UMask=0077
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=50
+KillMode=mixed
+LimitCORE=0
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/media/hzx/ssd/gs422-tasks /run/gs422-sdr /tmp
+# Shared /tmp preserves the capture tool's per-user cross-process SDR lock.
+PrivateTmp=false
+RestrictSUIDSGID=true
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+[Install]
+WantedBy=multi-user.target
