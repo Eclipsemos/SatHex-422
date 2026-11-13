@@ -254,6 +254,7 @@ class Manager:
             uhd = c['uhd_root']
             env.update(PYTHONPATH=uhd + '/lib/python3.10/site-packages',
                        LD_LIBRARY_PATH=uhd + '/lib', PYTHONUNBUFFERED='1',
+                       SATHEX_DECODER_CACHE=str(self.root / '.decoder-cache'),
                        PATH=uhd + '/bin:/usr/local/bin:/usr/bin:/bin')
             tools = Path(c['repo']) / 'tools'
             self.transition(task, 'CAPTURING')

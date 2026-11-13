@@ -26,7 +26,7 @@ with tempfile.TemporaryDirectory(prefix="gs422-package-") as tmp:
     shutil.copyfile(root / "README.md", stage / "usr/share/doc/gs422/README.md")
     shutil.copytree(root / "docs", stage / "usr/share/doc/gs422/docs")
     (stage / "DEBIAN/control").write_text('''Package: gs422
-Version: 2.5.0
+Version: 2.5.1
 Architecture: all
 Maintainer: Gansuan Development
 Section: admin
@@ -43,7 +43,7 @@ Description: Independent RS422 telemetry, network and SSH administration
         p = stage / "DEBIAN" / name
         p.write_text('#!/bin/sh\nset -e\n' + content)
         p.chmod(0o755)
-    target = dist / "gs422_2.5.0_all.deb"
+    target = dist / "gs422_2.5.1_all.deb"
     # Do not inherit a Windows checkout's modes or the builder's umask (or tmp 0700).
     stage.chmod(0o755)
     for p in stage.rglob('*'):

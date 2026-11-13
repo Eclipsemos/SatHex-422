@@ -1,2 +1,2 @@
 """Independent implementation of the Shanhe serial protocol."""
-__version__ = "2.5.0"
+__version__ = "2.5.1"

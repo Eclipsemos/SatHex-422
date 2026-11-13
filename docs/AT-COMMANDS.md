@@ -1,6 +1,6 @@
 # 当前可测试的 AT 命令
 
-适用版本：gs422 2.5.0。串口设置 **9600 / 8N1 / 无流控**，发送时加 **CRLF**。
+适用版本：gs422 2.5.1（兼容2.5.0命令）。串口设置 **9600 / 8N1 / 无流控**，发送时加 **CRLF**。
 命令使用大写，一次发一条，收到回复后再发下一条。
 
 ## 直接查询
@@ -193,6 +193,8 @@ AT+SDR=CONFIG,NR,2130150000,4000000,4000000,500,45,1,BROADCAST,100
 RESULT 字段：TECH、DETECTED、CELLS、PCI、PCI_MORE、PBCH、MIB、DCI。PCI 多个值用分号，最多列8个，超出时 PCI_MORE=1。NR 的 PBCH/MIB 是日志解码事件数；LTE 的 PBCH/MIB 显示 `-`，使用 CELLS 表示确认的小区数。DCI 是调度记录数。**DONE 只表示流程正常结束；DETECTED=0 是未确认小区，不能当作解码成功或无信号的证明。** 失败或取消仅返回状态和错误，不把中途产生的部分结果标成成功。
 
 结果保存在 `/media/hzx/ssd/gs422-tasks/<ID>/`，包含 `task.json`、capture 下的 IQ/manifest、decode 下的配置/日志/JSONL。串口返回摘要，不传大 IQ。文件不自动删除；SSD未挂载或空闲不足2 GiB时拒绝采集，旧任务可通过 ID 查询。新任务不会覆盖旧任务。
+
+2.5.1 配套更新后的 Spaceborne 工具，会在 SSD 的 `.decoder-cache/` 下复用 LTE FFT 规划缓存，无需新 AT 命令。首次任务仍需生成缓存，后续任务通常更快。NR 保持4 MS/s预设；CPU满载和高采样率仍可能采集失败。
 
 常见错误：BAD_COMMAND 参数错误；BUSY 已有活动任务/请求队列满；NO_TASK 未找到任务；UNAVAILABLE 后台服务不可达；SSD_NOT_MOUNTED、NO_SPACE、DEVICE_MISSING、UHD_MISSING、SOFTWARE_MISSING、IMAGE_MISSING、IMAGE_ARCH 表示前置条件不足；CAPTURE_FAILED、DECODE_FAILED、TIMEOUT 需查任务日志；CLEANUP_FAILED 表示容器清理未确认，阻止新任务，处理后台服务日志后重启。
 

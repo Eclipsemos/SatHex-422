@@ -9,7 +9,7 @@ Python 3.10+，Linux ARM64；不需要旧源码，不包含旧厂商代码。底
 串口测试直接查看 **[当前可测试的 AT 命令](docs/AT-COMMANDS.md)**。
 详细协议及历史验证记录保存在 [docs/archive](docs/archive/)。
 
-当前版本 **2.5.0**：新增 `AT+SDR` 参数设置、任务启动/取消、阶段查询和 LTE/NR 解码摘要。
+当前版本 **2.5.1**：SDR 任务在 SSD 上复用 LTE FFT 规划缓存，避免每个任务重复规划；需配套更新 Spaceborne 的 `sathex_decode.py`。保留 `AT+SDR` 参数设置、任务启动/取消、阶段查询和 LTE/NR 解码摘要。
 保留 `AT+DISK` 存储列表、整盘容量、挂载位置及文件系统使用量。
 保留有线静态 IPv4/DHCP 配置、确认保存/超时回滚，
 以及 SSH 状态、启停、开机启动和端口设置。保留 Docker 状态、容器/镜像分页列表、详情、资源查询，
@@ -66,11 +66,11 @@ current_divisor=1
 
 ## 安装与切换
 
-生成 `dist/gs422_2.5.0_all.deb`，纯 Python 包标记为 all，可在 ARM64 运行。包安装
+生成 `dist/gs422_2.5.1_all.deb`，纯 Python 包标记为 all，可在 ARM64 运行。包安装
 只注册服务，不自动占用现场串口。验证配置后切换：
 
 ```sh
-sudo dpkg -i dist/gs422_2.5.0_all.deb
+sudo dpkg -i dist/gs422_2.5.1_all.deb
 sudo cp /etc/shanhe-serial.conf /etc/gs422.conf
 sudo systemctl disable --now rs422.service shanhe-serial.service
 sudo systemctl enable --now gs422.service
