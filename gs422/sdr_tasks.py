@@ -32,6 +32,23 @@ class TaskError(Exception):
     pass
 
 
+def capture_options(config, available_cpus=None):
+    """Optional board-local transport profile; never changes global scheduling."""
+    frame = config.get('capture_recv_frame_size')
+    cpus = config.get('capture_cpus', [])
+    if frame is not None and (type(frame) is not int or frame != 16360):
+        raise TaskError('CAPTURE_CONFIG')
+    if not isinstance(cpus, list) or any(type(cpu) is not int or cpu < 0 for cpu in cpus) or len(set(cpus)) != len(cpus):
+        raise TaskError('CAPTURE_CONFIG')
+    if cpus:
+        allowed = os.sched_getaffinity(0) if available_cpus is None else available_cpus
+        if not set(cpus).issubset(allowed):
+            raise TaskError('CAPTURE_CPU_UNAVAILABLE')
+    prefix = ['/usr/bin/taskset', '-c', ','.join(map(str, cpus))] if cpus else []
+    options = ['--device-args', f'type=b200,recv_frame_size={frame}'] if frame else []
+    return prefix, options
+
+
 def result_summary(directory, tech):
     run = json.loads((directory / 'run.json').read_text())
     summary = json.loads((directory / 'analysis/summary.json').read_text())
@@ -250,6 +267,9 @@ class Manager:
         try:
             self.preflight(task)
             p, c = task['params'], self.config
+            prefix, options = capture_options(c)
+            task['capture_profile'] = {'recv_frame_size': c.get('capture_recv_frame_size'),
+                                       'cpus': c.get('capture_cpus', [])}
             env = os.environ.copy()
             uhd = c['uhd_root']
             env.update(PYTHONPATH=uhd + '/lib/python3.10/site-packages',
@@ -258,11 +278,11 @@ class Manager:
                        PATH=uhd + '/bin:/usr/local/bin:/usr/bin:/bin')
             tools = Path(c['repo']) / 'tools'
             self.transition(task, 'CAPTURING')
-            self.process(task, ['/usr/bin/python3', str(tools / 'sathex_capture.py'),
+            self.process(task, prefix + ['/usr/bin/python3', str(tools / 'sathex_capture.py'),
                          '--output', str(folder / 'capture'), '--frequency', str(p['FREQ_HZ']),
                          '--rate', str(p['RATE_SPS']), '--bandwidth', str(p['BW_HZ']),
                          '--seconds', str(p['DURATION_MS'] / 1000), '--gain', str(p['GAIN_DB']),
-                         '--channel', str(p['CHANNEL']), '--antenna', 'RX2'],
+                         '--channel', str(p['CHANNEL']), '--antenna', 'RX2'] + options,
                          env, 75, folder / 'capture.log')
             self.transition(task, 'DECODING')
             argv = ['/usr/bin/python3', str(tools / 'sathex_decode.py'),

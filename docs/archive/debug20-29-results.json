@@ -1,0 +1,363 @@
+{
+  "debug20-20261116": [
+    {
+      "name": "baseline-0",
+      "exit": 1,
+      "wall": 6.052403011999559,
+      "error": "ternal GPSDO: GPSTCXO v3.8 for PCIEB210\n[INFO] [B200] Initialize CODEC control...\n[INFO] [B200] Initialize Radio control...\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Setting master clock rate selection to 'automatic'.\n[INFO] [B200] Asking for clock rate 16.000000 MHz... \n[INFO] [B200] Actually got clock rate 16.000000 MHz.\n[INFO] [B200] Asking for clock rate 20.000000 MHz... \n[INFO] [B200] Actually got clock rate 20.000000 MHz.\nOTraceback (most recent call last):\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 295, in worker_main\n    receive(args)\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 138, in receive\n    raise RuntimeError(\"RX metadata error; capture rejected: \" + md.strerror())\nRuntimeError: RX metadata error; capture rejected: ERROR_CODE_OVERFLOW (Overflow)\n"
+    },
+    {
+      "name": "baseline-1",
+      "exit": 1,
+      "wall": 6.2025994260002335,
+      "error": "ternal GPSDO: GPSTCXO v3.8 for PCIEB210\n[INFO] [B200] Initialize CODEC control...\n[INFO] [B200] Initialize Radio control...\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Setting master clock rate selection to 'automatic'.\n[INFO] [B200] Asking for clock rate 16.000000 MHz... \n[INFO] [B200] Actually got clock rate 16.000000 MHz.\n[INFO] [B200] Asking for clock rate 20.000000 MHz... \n[INFO] [B200] Actually got clock rate 20.000000 MHz.\nOTraceback (most recent call last):\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 295, in worker_main\n    receive(args)\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 138, in receive\n    raise RuntimeError(\"RX metadata error; capture rejected: \" + md.strerror())\nRuntimeError: RX metadata error; capture rejected: ERROR_CODE_OVERFLOW (Overflow)\n"
+    },
+    {
+      "name": "baseline-2",
+      "exit": 1,
+      "wall": 5.5500206609995075,
+      "error": "ternal GPSDO: GPSTCXO v3.8 for PCIEB210\n[INFO] [B200] Initialize CODEC control...\n[INFO] [B200] Initialize Radio control...\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Setting master clock rate selection to 'automatic'.\n[INFO] [B200] Asking for clock rate 16.000000 MHz... \n[INFO] [B200] Actually got clock rate 16.000000 MHz.\n[INFO] [B200] Asking for clock rate 20.000000 MHz... \n[INFO] [B200] Actually got clock rate 20.000000 MHz.\nOTraceback (most recent call last):\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 295, in worker_main\n    receive(args)\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 138, in receive\n    raise RuntimeError(\"RX metadata error; capture rejected: \" + md.strerror())\nRuntimeError: RX metadata error; capture rejected: ERROR_CODE_OVERFLOW (Overflow)\n"
+    },
+    {
+      "name": "frame16k-0",
+      "exit": 1,
+      "wall": 5.802170634999129,
+      "error": "ternal GPSDO: GPSTCXO v3.8 for PCIEB210\n[INFO] [B200] Initialize CODEC control...\n[INFO] [B200] Initialize Radio control...\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Setting master clock rate selection to 'automatic'.\n[INFO] [B200] Asking for clock rate 16.000000 MHz... \n[INFO] [B200] Actually got clock rate 16.000000 MHz.\n[INFO] [B200] Asking for clock rate 20.000000 MHz... \n[INFO] [B200] Actually got clock rate 20.000000 MHz.\nOTraceback (most recent call last):\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 295, in worker_main\n    receive(args)\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 138, in receive\n    raise RuntimeError(\"RX metadata error; capture rejected: \" + md.strerror())\nRuntimeError: RX metadata error; capture rejected: ERROR_CODE_OVERFLOW (Overflow)\n"
+    },
+    {
+      "name": "frame16k-1",
+      "exit": 1,
+      "wall": 5.646530235000682,
+      "error": "alformed GPSDO string: 0.00,060180,,*23\n[INFO] [B200] Initialize CODEC control...\n[INFO] [B200] Initialize Radio control...\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Setting master clock rate selection to 'automatic'.\n[INFO] [B200] Asking for clock rate 16.000000 MHz... \n[INFO] [B200] Actually got clock rate 16.000000 MHz.\n[INFO] [B200] Asking for clock rate 20.000000 MHz... \n[INFO] [B200] Actually got clock rate 20.000000 MHz.\nOTraceback (most recent call last):\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 295, in worker_main\n    receive(args)\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 138, in receive\n    raise RuntimeError(\"RX metadata error; capture rejected: \" + md.strerror())\nRuntimeError: RX metadata error; capture rejected: ERROR_CODE_OVERFLOW (Overflow)\n"
+    },
+    {
+      "name": "frame16k-2",
+      "exit": 1,
+      "wall": 6.0045972549996804,
+      "error": "ternal GPSDO: GPSTCXO v3.8 for PCIEB210\n[INFO] [B200] Initialize CODEC control...\n[INFO] [B200] Initialize Radio control...\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Setting master clock rate selection to 'automatic'.\n[INFO] [B200] Asking for clock rate 16.000000 MHz... \n[INFO] [B200] Actually got clock rate 16.000000 MHz.\n[INFO] [B200] Asking for clock rate 20.000000 MHz... \n[INFO] [B200] Actually got clock rate 20.000000 MHz.\nOTraceback (most recent call last):\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 295, in worker_main\n    receive(args)\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 138, in receive\n    raise RuntimeError(\"RX metadata error; capture rejected: \" + md.strerror())\nRuntimeError: RX metadata error; capture rejected: ERROR_CODE_OVERFLOW (Overflow)\n"
+    },
+    {
+      "name": "frame16k-big-0",
+      "exit": 0,
+      "wall": 5.609001423999871,
+      "samples": 2400000,
+      "source": {
+        "continuity_checked": true,
+        "iq_sha256": "902b17e67350d18ff386a61daeef431f3845c4c5bd7200369b702419bc0593d7",
+        "metadata_errors": 0,
+        "sample_rate_readback_sps": 20000000.0,
+        "timings": {
+          "encode_write_seconds": 0.21825864799939154,
+          "receive_seconds": 0.41997940900000685,
+          "setup_seconds": 4.241857240000172
+        }
+      }
+    },
+    {
+      "name": "frame16k-big-1",
+      "exit": 0,
+      "wall": 5.50169910600016,
+      "samples": 2400000,
+      "source": {
+        "continuity_checked": true,
+        "iq_sha256": "3b49aa015721022a7db44f278f6826a9478ba248abefc8569db9d7027ff2fdb0",
+        "metadata_errors": 0,
+        "sample_rate_readback_sps": 20000000.0,
+        "timings": {
+          "encode_write_seconds": 0.198331068000698,
+          "receive_seconds": 0.41955545299970254,
+          "setup_seconds": 4.154238334000183
+        }
+      }
+    },
+    {
+      "name": "frame16k-big-2",
+      "exit": 0,
+      "wall": 5.654645712998899,
+      "samples": 2400000,
+      "source": {
+        "continuity_checked": true,
+        "iq_sha256": "97a2ff4983fdec2d7cc3febc1b3fa85675a9d98748507c2047946867362a7738",
+        "metadata_errors": 0,
+        "sample_rate_readback_sps": 20000000.0,
+        "timings": {
+          "encode_write_seconds": 0.18368363099943963,
+          "receive_seconds": 0.4195155800007342,
+          "setup_seconds": 4.340568296000129
+        }
+      }
+    }
+  ],
+  "debug20-followup-20261116": [
+    {
+      "name": "small-big-0",
+      "exit": 1,
+      "wall": 5.198364071000469,
+      "error": "ternal GPSDO: GPSTCXO v3.8 for PCIEB210\n[INFO] [B200] Initialize CODEC control...\n[INFO] [B200] Initialize Radio control...\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Setting master clock rate selection to 'automatic'.\n[INFO] [B200] Asking for clock rate 16.000000 MHz... \n[INFO] [B200] Actually got clock rate 16.000000 MHz.\n[INFO] [B200] Asking for clock rate 20.000000 MHz... \n[INFO] [B200] Actually got clock rate 20.000000 MHz.\nOTraceback (most recent call last):\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 295, in worker_main\n    receive(args)\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 138, in receive\n    raise RuntimeError(\"RX metadata error; capture rejected: \" + md.strerror())\nRuntimeError: RX metadata error; capture rejected: ERROR_CODE_OVERFLOW (Overflow)\n"
+    },
+    {
+      "name": "small-big-1",
+      "exit": 1,
+      "wall": 5.302455388000453,
+      "error": "ternal GPSDO: GPSTCXO v3.8 for PCIEB210\n[INFO] [B200] Initialize CODEC control...\n[INFO] [B200] Initialize Radio control...\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Setting master clock rate selection to 'automatic'.\n[INFO] [B200] Asking for clock rate 16.000000 MHz... \n[INFO] [B200] Actually got clock rate 16.000000 MHz.\n[INFO] [B200] Asking for clock rate 20.000000 MHz... \n[INFO] [B200] Actually got clock rate 20.000000 MHz.\nOTraceback (most recent call last):\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 295, in worker_main\n    receive(args)\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 138, in receive\n    raise RuntimeError(\"RX metadata error; capture rejected: \" + md.strerror())\nRuntimeError: RX metadata error; capture rejected: ERROR_CODE_OVERFLOW (Overflow)\n"
+    },
+    {
+      "name": "small-big-2",
+      "exit": 1,
+      "wall": 5.252820777001034,
+      "error": "d GPSDO string: 60180,,*2C\n[INFO] [B200] Initialize CODEC control...\n[INFO] [B200] Initialize Radio control...\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Setting master clock rate selection to 'automatic'.\n[INFO] [B200] Asking for clock rate 16.000000 MHz... \n[INFO] [B200] Actually got clock rate 16.000000 MHz.\n[INFO] [B200] Asking for clock rate 20.000000 MHz... \n[INFO] [B200] Actually got clock rate 20.000000 MHz.\nDTraceback (most recent call last):\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 295, in worker_main\n    receive(args)\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 138, in receive\n    raise RuntimeError(\"RX metadata error; capture rejected: \" + md.strerror())\nRuntimeError: RX metadata error; capture rejected: ERROR_CODE_OVERFLOW (Out of sequence error)\n"
+    },
+    {
+      "name": "small-big-3",
+      "exit": 0,
+      "wall": 5.75441794300059,
+      "samples": 2400000,
+      "source": {
+        "continuity_checked": true,
+        "iq_sha256": "5dcfde5dd09c22e7fa0e560e49c2861eb63f4ad041baf6d47d31f413e122df38",
+        "metadata_errors": 0,
+        "sample_rate_readback_sps": 20000000.0,
+        "timings": {
+          "encode_write_seconds": 0.19416409000041313,
+          "receive_seconds": 0.41931471299903933,
+          "setup_seconds": 4.3909628349993
+        }
+      }
+    },
+    {
+      "name": "small-big-4",
+      "exit": 1,
+      "wall": 5.202785387000404,
+      "error": "ternal GPSDO: GPSTCXO v3.8 for PCIEB210\n[INFO] [B200] Initialize CODEC control...\n[INFO] [B200] Initialize Radio control...\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Setting master clock rate selection to 'automatic'.\n[INFO] [B200] Asking for clock rate 16.000000 MHz... \n[INFO] [B200] Actually got clock rate 16.000000 MHz.\n[INFO] [B200] Asking for clock rate 20.000000 MHz... \n[INFO] [B200] Actually got clock rate 20.000000 MHz.\nOTraceback (most recent call last):\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 295, in worker_main\n    receive(args)\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 138, in receive\n    raise RuntimeError(\"RX metadata error; capture rejected: \" + md.strerror())\nRuntimeError: RX metadata error; capture rejected: ERROR_CODE_OVERFLOW (Overflow)\n"
+    },
+    {
+      "name": "small-big-5",
+      "exit": 0,
+      "wall": 5.704858177999995,
+      "samples": 2400000,
+      "source": {
+        "continuity_checked": true,
+        "iq_sha256": "1d6d652f46c4a03143880597f65ead3ce1b88fbc67e385f7611863204ecc94ed",
+        "metadata_errors": 0,
+        "sample_rate_readback_sps": 20000000.0,
+        "timings": {
+          "encode_write_seconds": 0.19183560100100294,
+          "receive_seconds": 0.4192756320007902,
+          "setup_seconds": 4.3395083639989025
+        }
+      }
+    },
+    {
+      "name": "small-big-6",
+      "exit": 1,
+      "wall": 5.454772045999562,
+      "error": "ternal GPSDO: GPSTCXO v3.8 for PCIEB210\n[INFO] [B200] Initialize CODEC control...\n[INFO] [B200] Initialize Radio control...\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Performing register loopback test... \n[INFO] [B200] Register loopback test passed\n[INFO] [B200] Setting master clock rate selection to 'automatic'.\n[INFO] [B200] Asking for clock rate 16.000000 MHz... \n[INFO] [B200] Actually got clock rate 16.000000 MHz.\n[INFO] [B200] Asking for clock rate 20.000000 MHz... \n[INFO] [B200] Actually got clock rate 20.000000 MHz.\nOTraceback (most recent call last):\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 295, in worker_main\n    receive(args)\n  File \"/home/hzx/spaceborne/code/Spaceborne/tools/sathex_capture.py\", line 138, in receive\n    raise RuntimeError(\"RX metadata error; capture rejected: \" + md.strerror())\nRuntimeError: RX metadata error; capture rejected: ERROR_CODE_OVERFLOW (Overflow)\n"
+    },
+    {
+      "name": "small-big-7",
+      "exit": 0,
+      "wall": 5.656731718998344,
+      "samples": 2400000,
+      "source": {
+        "continuity_checked": true,
+        "iq_sha256": "eb587aa70080dc1a19c5c58a86579d73655e5c39ef41f8d796e4e97a58f27b8a",
+        "metadata_errors": 0,
+        "sample_rate_readback_sps": 20000000.0,
+        "timings": {
+          "encode_write_seconds": 0.19871775699903083,
+          "receive_seconds": 0.4196234259998164,
+          "setup_seconds": 4.270652001001508
+        }
+      }
+    },
+    {
+      "name": "frame16k-big-0",
+      "exit": 0,
+      "wall": 5.906942147999871,
+      "samples": 2400000,
+      "source": {
+        "continuity_checked": true,
+        "iq_sha256": "64062a5e6d5fbaf996d81fafa15e035990e8bc8d74704613cc41d74d97aee8d0",
+        "metadata_errors": 0,
+        "sample_rate_readback_sps": 20000000.0,
+        "timings": {
+          "encode_write_seconds": 0.20822225200026878,
+          "receive_seconds": 0.41965546299979906,
+          "setup_seconds": 4.52231534099883
+        }
+      }
+    },
+    {
+      "name": "frame16k-big-1",
+      "exit": 0,
+      "wall": 5.556616043999384,
+      "samples": 2400000,
+      "source": {
+        "continuity_checked": true,
+        "iq_sha256": "cab57c3902645e174989a7ea69ddf89f8a580df193aaa9cf924b2ade78935794",
+        "metadata_errors": 0,
+        "sample_rate_readback_sps": 20000000.0,
+        "timings": {
+          "encode_write_seconds": 0.20412083300107042,
+          "receive_seconds": 0.4195577919999778,
+          "setup_seconds": 4.2038864599999215
+        }
+      }
+    },
+    {
+      "name": "frame16k-big-2",
+      "exit": 0,
+      "wall": 5.751835398999901,
+      "samples": 2400000,
+      "source": {
+        "continuity_checked": true,
+        "iq_sha256": "8c29e5ce313b7dd0fc6b5dd6e9054d84600f07137102c3ac4a8177a8166a2d01",
+        "metadata_errors": 0,
+        "sample_rate_readback_sps": 20000000.0,
+        "timings": {
+          "encode_write_seconds": 0.16115871699912532,
+          "receive_seconds": 0.41974665300040215,
+          "setup_seconds": 4.407725507000578
+        }
+      }
+    },
+    {
+      "name": "frame16k-big-3",
+      "exit": 0,
+      "wall": 5.450327548000132,
+      "samples": 2400000,
+      "source": {
+        "continuity_checked": true,
+        "iq_sha256": "36f7fb5f2a0c0679b5f7a2822800e0b201a9a7ee31c962f8d546feb224490e73",
+        "metadata_errors": 0,
+        "sample_rate_readback_sps": 20000000.0,
+        "timings": {
+          "encode_write_seconds": 0.15105854399917007,
+          "receive_seconds": 0.41947472599895264,
+          "setup_seconds": 4.107036216000779
+        }
+      }
+    },
+    {
+      "name": "frame16k-big-4",
+      "exit": 0,
+      "wall": 5.8061263550007425,
+      "samples": 2400000,
+      "source": {
+        "continuity_checked": true,
+        "iq_sha256": "c98da2e6e7d8f4517b8a6079d944bb632ddd1b9c689d0f9aa3205c445173657d",
+        "metadata_errors": 0,
+        "sample_rate_readback_sps": 20000000.0,
+        "timings": {
+          "encode_write_seconds": 0.19600927700048487,
+          "receive_seconds": 0.4195702999986679,
+          "setup_seconds": 4.446916627999599
+        }
+      }
+    },
+    {
+      "name": "frame16k-big-5",
+      "exit": 0,
+      "wall": 5.452053895000063,
+      "samples": 2400000,
+      "source": {
+        "continuity_checked": true,
+        "iq_sha256": "a5563846c5cfaff35b50779f5ae3af7282377bc0accb6b6183fd53a663215f21",
+        "metadata_errors": 0,
+        "sample_rate_readback_sps": 20000000.0,
+        "timings": {
+          "encode_write_seconds": 0.20584527000028174,
+          "receive_seconds": 0.41958419700131344,
+          "setup_seconds": 4.16228383699854
+        }
+      }
+    },
+    {
+      "name": "frame16k-big-6",
+      "exit": 0,
+      "wall": 5.655587953999202,
+      "samples": 2400000,
+      "source": {
+        "continuity_checked": true,
+        "iq_sha256": "d7621dbc2b459cfa84ca173f3a95e9f24eb6f8d56a64aab676d546890583683b",
+        "metadata_errors": 0,
+        "sample_rate_readback_sps": 20000000.0,
+        "timings": {
+          "encode_write_seconds": 0.20626558500043757,
+          "receive_seconds": 0.4196486010005174,
+          "setup_seconds": 4.349608619000719
+        }
+      }
+    },
+    {
+      "name": "frame16k-big-7",
+      "exit": 0,
+      "wall": 5.5047677399998065,
+      "samples": 2400000,
+      "source": {
+        "continuity_checked": true,
+        "iq_sha256": "adc0fabac78c6489bd8aa59e70265245650f5cfe93b55431d4d5ff8c72fc99f6",
+        "metadata_errors": 0,
+        "sample_rate_readback_sps": 20000000.0,
+        "timings": {
+          "encode_write_seconds": 0.19496514599995862,
+          "receive_seconds": 0.4195747099984146,
+          "setup_seconds": 4.148334363999311
+        }
+      }
+    }
+  ],
+  "debug20-one-second-20261116": [
+    {
+      "name": "frame16k-big-0",
+      "exit": 0,
+      "wall": 7.680338999000014,
+      "samples": 20000000,
+      "source": {
+        "continuity_checked": true,
+        "iq_sha256": "87db30e933f7a37aea41caf385c0e28c91486d87d22d15f8c404f94947e6556b",
+        "metadata_errors": 0,
+        "sample_rate_readback_sps": 20000000.0,
+        "timings": {
+          "encode_write_seconds": 1.1975375849997363,
+          "receive_seconds": 1.3001453029992263,
+          "setup_seconds": 4.444616157999917
+        }
+      }
+    },
+    {
+      "name": "frame16k-big-1",
+      "exit": 0,
+      "wall": 7.520235670999682,
+      "samples": 20000000,
+      "source": {
+        "continuity_checked": true,
+        "iq_sha256": "56a271abaf6ddcd4b434e61fc2969d96d6a73aae42aea00e7a6624e3728e4792",
+        "metadata_errors": 0,
+        "sample_rate_readback_sps": 20000000.0,
+        "timings": {
+          "encode_write_seconds": 1.174404934999984,
+          "receive_seconds": 1.300065577001078,
+          "setup_seconds": 4.281477253000048
+        }
+      }
+    },
+    {
+      "name": "frame16k-big-2",
+      "exit": 0,
+      "wall": 7.765974507999999,
+      "samples": 20000000,
+      "source": {
+        "continuity_checked": true,
+        "iq_sha256": "3aa4a666b76b5e27e41d22daec51615446a675f9cebd1484ac84c36353023dd5",
+        "metadata_errors": 0,
+        "sample_rate_readback_sps": 20000000.0,
+        "timings": {
+          "encode_write_seconds": 1.1335572179996234,
+          "receive_seconds": 1.3001246509993507,
+          "setup_seconds": 4.600813871000355
+        }
+      }
+    }
+  ]
+}
