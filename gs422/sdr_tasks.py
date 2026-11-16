@@ -34,6 +34,13 @@ class TaskError(Exception):
 
 def capture_options(config, available_cpus=None):
     """Optional board-local transport profile; never changes global scheduling."""
+    backend = config.get('capture_backend', 'sc16-rt')
+    if backend == 'sc16-rt':
+        if config.get('capture_recv_frame_size') is not None or config.get('capture_cpus'):
+            raise TaskError('CAPTURE_CONFIG')
+        return [], ['--backend', 'sc16-rt']
+    if backend != 'python':
+        raise TaskError('CAPTURE_CONFIG')
     frame = config.get('capture_recv_frame_size')
     cpus = config.get('capture_cpus', [])
     if frame is not None and (type(frame) is not int or frame != 16360):
@@ -45,7 +52,7 @@ def capture_options(config, available_cpus=None):
         if not set(cpus).issubset(allowed):
             raise TaskError('CAPTURE_CPU_UNAVAILABLE')
     prefix = ['/usr/bin/taskset', '-c', ','.join(map(str, cpus))] if cpus else []
-    options = ['--device-args', f'type=b200,recv_frame_size={frame}'] if frame else []
+    options = ['--backend', 'python'] + (['--device-args', f'type=b200,recv_frame_size={frame}'] if frame else [])
     return prefix, options
 
 
@@ -187,6 +194,8 @@ class Manager:
         if shutil.disk_usage(self.root).free < 2 * 1024**3:
             raise TaskError('NO_SPACE')
         repo = Path(c['repo'])
+        if c.get('capture_backend','sc16-rt') == 'sc16-rt' and not Path('/usr/local/sbin/sathex-capture').is_file():
+            raise TaskError('NATIVE_RUNTIME_MISSING')
         for relative in ('tools/sathex_capture.py', 'tools/sathex_decode.py', 'config/nr-n1-2130p15.json'):
             if not (repo / relative).is_file():
                 raise TaskError('SOFTWARE_MISSING')
@@ -268,7 +277,8 @@ class Manager:
             self.preflight(task)
             p, c = task['params'], self.config
             prefix, options = capture_options(c)
-            task['capture_profile'] = {'recv_frame_size': c.get('capture_recv_frame_size'),
+            task['capture_profile'] = {'backend': c.get('capture_backend','sc16-rt'),
+                                       'recv_frame_size': c.get('capture_recv_frame_size'),
                                        'cpus': c.get('capture_cpus', [])}
             env = os.environ.copy()
             uhd = c['uhd_root']

@@ -1,6 +1,6 @@
 # 当前可测试的 AT 命令
 
-适用版本：gs422 2.5.2（兼容2.5.0命令）。串口设置 **9600 / 8N1 / 无流控**，发送时加 **CRLF**。
+适用版本：gs422 2.6.0（兼容2.5.0命令）。串口设置 **9600 / 8N1 / 无流控**，发送时加 **CRLF**。
 命令使用大写，一次发一条，收到回复后再发下一条。
 
 ## 直接查询
@@ -148,7 +148,7 @@ docker_allow=my-worker;another-worker
 
 ## SDR 采集与解码任务
 
-135 已部署 `gs422-sdr.service` 后台任务服务。422 只负责下发命令和查询，采集/解码在后台运行；一次只允许一个任务，不阻塞 STA/CPU 等查询。任务是先采后解，不是连续实时流。
+135、29 使用 `gs422-sdr.service` 后台任务服务。422 只负责下发命令和查询，采集/解码在后台运行；一次只允许一个任务，不阻塞 STA/CPU 等查询。任务是先采后解，不是连续实时流。
 
 先测试 NR，按顺序发送，每条收到回复后再发下一条：
 
@@ -184,7 +184,7 @@ AT+SDR=CONFIG,NR,2130150000,4000000,4000000,500,45,1,BROADCAST,100
 
 上例切换到 channel 1。UHD 逻辑天线固定为 RX2；它与面板的 RX1/RX2 标签不是同一参数。技术为 LTE/NR，阶段为 BROADCAST/DCI；**NR 仅允许 BROADCAST，并固定使用 15 kHz SSB 配置**。频率须对准目标载波中心/SSB，换频率不等于自动搜索或支持所有 NR 频段。
 
-本轮现场 NR 在 channel1 解出 PCI690；LTE广播在 channel0 解出 PCI402。LTE_DCI预设本轮发生一次 RX overflow，会返回 CAPTURE_FAILED，不能保证高采样率稳定。
+135 的历史现场测试曾解出 NR PCI690、LTE PCI402。29 在 2026-11-16 切换原生 SC16 后，NR、LTE、LTE_DCI 预设任务均正常结束，但均未确认小区（DETECTED=0）；不要把不同机器、天线环境的结果混用。
 
 数字均为整数。允许频率70 MHz～6 GHz、采样率1～20 MS/s、带宽1 MHz～采样率、时长50～2000 ms、增益0～76 dB、通道0/1；实际硬件不接受参数、出现溢出或时间不连续时任务失败。NR 带宽至少4 MHz。LTE DCI 的带宽必须覆盖 PRB 对应名义载波带宽；PRB 允许6/15/25/50/75/100，广播阶段实际只解中心6 PRB。范围是参数校验边界，不代表所有组合都已实测；建议从预设开始。
 
@@ -196,7 +196,7 @@ RESULT 字段：TECH、DETECTED、CELLS、PCI、PCI_MORE、PBCH、MIB、DCI。PC
 
 2.5.1 配套更新后的 Spaceborne 工具，会在 SSD 的 `.decoder-cache/` 下复用 LTE FFT 规划缓存，无需新 AT 命令。首次任务仍需生成缓存，后续任务通常更快。NR 保持4 MS/s预设；CPU满载和高采样率仍可能采集失败。
 
-常见错误：BAD_COMMAND 参数错误；BUSY 已有活动任务/请求队列满；NO_TASK 未找到任务；UNAVAILABLE 后台服务不可达；SSD_NOT_MOUNTED、NO_SPACE、DEVICE_MISSING、UHD_MISSING、SOFTWARE_MISSING、IMAGE_MISSING、IMAGE_ARCH 表示前置条件不足；CAPTURE_FAILED、DECODE_FAILED、TIMEOUT 需查任务日志；CLEANUP_FAILED 表示容器清理未确认，阻止新任务，处理后台服务日志后重启。
+常见错误：BAD_COMMAND 参数错误；BUSY 已有活动任务/请求队列满；NO_TASK 未找到任务；UNAVAILABLE 后台服务不可达；SSD_NOT_MOUNTED、NO_SPACE、DEVICE_MISSING、UHD_MISSING、SOFTWARE_MISSING、IMAGE_MISSING、IMAGE_ARCH 表示前置条件不足；NATIVE_RUNTIME_MISSING 表示尚未安装原生入口，CAPTURE_CONFIG 表示后端配置冲突；CAPTURE_FAILED、DECODE_FAILED、TIMEOUT 需查任务日志；CLEANUP_FAILED 表示容器清理未确认，阻止新任务，处理后台服务日志后重启。
 
 后台服务的本机路径与镜像配置位于 `/etc/gs422-sdr.json`，不通过串口修改。Docker 白名单只针对 `AT+DOCKER` 的人工容器控制；SDR 服务独立启动指定算法镜像，不执行串口传入的 shell、镜像名或文件路径。
 
@@ -243,4 +243,4 @@ HOUMO、IO、MEM、PWR、THERM、UPTIME、ID、VER、CAP、TIME、HELP
 
 详细字段说明、协议和历史验证记录保存在 [archive](archive/)，日常测试看本页即可。
 
-29 的 2.5.2 部署使用大接收帧和 CPU4–7；AT 命令格式不变。详见 [20 MS/s 接收验证](archive/VALIDATION-2.5.2-29.md)。
+2.6.0 默认使用原生 SC16 接收和 SSD 异步写盘。AT 命令格式不变；单次仍最多 20 MS/s、2 秒。部署需新版 Spaceborne 和 SDR 原生运行时；缺失时返回 `NATIVE_RUNTIME_MISSING`，不自动改用旧后端。

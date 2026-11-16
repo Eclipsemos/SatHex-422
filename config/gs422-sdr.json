@@ -4,6 +4,7 @@
   "output_root": "/media/hzx/ssd/gs422-tasks",
   "repo": "/home/hzx/spaceborne/code/Spaceborne",
   "uhd_root": "/home/hzx/sdr/managed/uhd-4.8.0.0",
+  "capture_backend": "sc16-rt",
   "images": {
     "LTE": "spaceborne-4gapp:1.2.0-prep.2",
     "NR": "spaceborne-5gapp:sathex-syncfix-20261112"

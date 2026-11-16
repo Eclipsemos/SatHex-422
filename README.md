@@ -9,7 +9,7 @@ Python 3.10+，Linux ARM64；不需要旧源码，不包含旧厂商代码。底
 串口测试直接查看 **[当前可测试的 AT 命令](docs/AT-COMMANDS.md)**。
 详细协议及历史验证记录保存在 [docs/archive](docs/archive/)。
 
-当前版本 **2.5.2**：支持为各机器设置 SDR 接收帧大小及采集 CPU 亲和性，29 使用 16360 字节帧和 CPU4–7 解决 20 MS/s 短采集溢出；配置及验证范围见 [29 接收修复记录](docs/archive/VALIDATION-2.5.2-29.md)。SDR 任务在 SSD 上复用 LTE FFT 规划缓存，避免每个任务重复规划；需配套更新 Spaceborne 的 `sathex_decode.py`。保留 `AT+SDR` 参数设置、任务启动/取消、阶段查询和 LTE/NR 解码摘要。
+当前版本 **2.6.0**：SDR 默认使用 SatHex 原生 SC16 接收、实时线程和异步 NVMe 写盘。需先运行 SDR 部署工具的 `install-native`，并更新 Spaceborne 采集适配器。运行时缺失或不兼容时明确失败，不自动退回旧后端。已有机器配置应设置 `capture_backend=sc16-rt` 并删除旧 `capture_recv_frame_size/capture_cpus`；仅诊断时显式选择 `capture_backend=python`。AT 命令与采集参数范围保持不变，仍为先采后解。SDR 任务继续复用 LTE FFT 规划缓存。
 保留 `AT+DISK` 存储列表、整盘容量、挂载位置及文件系统使用量。
 保留有线静态 IPv4/DHCP 配置、确认保存/超时回滚，
 以及 SSH 状态、启停、开机启动和端口设置。保留 Docker 状态、容器/镜像分页列表、详情、资源查询，

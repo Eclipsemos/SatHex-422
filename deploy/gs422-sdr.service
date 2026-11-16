@@ -21,13 +21,17 @@ RestartSec=5
 TimeoutStopSec=50
 KillMode=mixed
 LimitCORE=0
-NoNewPrivileges=true
+# Only the root-owned sathex-capture launcher may elevate via its sudo rule.
+# It moves its own cgroup, sets the RT limit, then drops to hzx before capture.
+NoNewPrivileges=false
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/media/hzx/ssd/gs422-tasks /run/gs422-sdr /tmp
+ReadWritePaths=/media/hzx/ssd/gs422-tasks /run/gs422-sdr /tmp /sys/fs/cgroup
 # Shared /tmp preserves the capture tool's per-user cross-process SDR lock.
 PrivateTmp=false
-RestrictSUIDSGID=true
+# RestrictSUIDSGID would implicitly force no_new_privs for this non-root unit,
+# preventing the narrowly authorized sudo launcher despite NoNewPrivileges=no.
+RestrictSUIDSGID=false
 Environment=PYTHONDONTWRITEBYTECODE=1
 
 [Install]

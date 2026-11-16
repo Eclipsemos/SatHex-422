@@ -12,15 +12,19 @@ from gs422.sdr_tasks import Manager, TaskError, result_summary, capture_options
 
 class SDRTests(unittest.TestCase):
     def test_capture_profile_validation_and_default_compatibility(self):
-        self.assertEqual(capture_options({}), ([], []))
-        self.assertEqual(capture_options({'capture_recv_frame_size': 16360, 'capture_cpus': [4, 5]}, {4, 5}),
-                         (['/usr/bin/taskset', '-c', '4,5'], ['--device-args', 'type=b200,recv_frame_size=16360']))
+        self.assertEqual(capture_options({}), ([], ['--backend','sc16-rt']))
+        self.assertEqual(capture_options({'capture_backend':'python'}), ([], ['--backend','python']))
+        self.assertEqual(capture_options({'capture_backend':'python','capture_recv_frame_size': 16360, 'capture_cpus': [4, 5]}, {4, 5}),
+                         (['/usr/bin/taskset', '-c', '4,5'], ['--backend','python','--device-args', 'type=b200,recv_frame_size=16360']))
         for cfg in [{'capture_cpus': '4-7'}, {'capture_cpus': [True]}, {'capture_cpus': [4, 4]},
                     {'capture_cpus': [-1]}, {'capture_recv_frame_size': '16360'}, {'capture_recv_frame_size': 65536}]:
             with self.subTest(cfg=cfg), self.assertRaisesRegex(TaskError, 'CAPTURE_CONFIG'):
-                capture_options(cfg, {4, 5})
+                capture_options(dict(cfg,capture_backend='python'), {4, 5})
         with self.assertRaisesRegex(TaskError, 'CAPTURE_CPU_UNAVAILABLE'):
-            capture_options({'capture_cpus': [6]}, {4, 5})
+            capture_options({'capture_backend':'python','capture_cpus': [6]}, {4, 5})
+        for cfg in [{'capture_backend':'unknown'}, {'capture_recv_frame_size':16360}, {'capture_cpus':[4]}]:
+            with self.assertRaisesRegex(TaskError,'CAPTURE_CONFIG'):
+                capture_options(cfg)
 
     def test_protocol_and_parameter_limits(self):
         self.assertEqual(parse(b'AT+SDR?'), ('SDR', ('STATUS',)))
