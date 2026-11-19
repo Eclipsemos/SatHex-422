@@ -3,6 +3,7 @@
 本开发分支包含试验星01二进制协议原型：[帧分配草案](docs/SATELLITE-FRAMES.md)、
 [业务执行器接口与未接入范围](docs/SPACE-ADAPTERS.md)、[联调记录](docs/SPACE-VALIDATION.md)。
 原型为独立入口，不默认切换现有AT服务；业务执行器尚待接入，不能作为完整载荷功能验收。
+算法相关五项映射按用户要求留空；其余业务按[非算法业务设计](docs/PAYLOAD-SERVICES-DESIGN.md)分阶段实现。
 X26现有Docker故障见[内核检查结果](docs/DOCKER-X26-DIAGNOSIS.md)。
 
 独立实现 `shanhe-serial 0.2.2` 的串口功能：STA、IP1、IP2、WIFI 查询及配网。

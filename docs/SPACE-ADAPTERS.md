@@ -1,5 +1,7 @@
 # 本机业务执行器接口
 
+2026-11-19范围更新：按用户要求，task_start/task_stop/task_pause/software_resume/software_stop五个算法相关映射明确留空，不提供假算法。非算法业务继续按[业务设计草案](PAYLOAD-SERVICES-DESIGN.md)开发；其中新增服务和遥测页目前属于设计，尚未接入执行器。
+
 实验入口：`python3 -m gs422.space_service --config /etc/gs422.conf --adapters /etc/gs422-space-adapters.json`。示例配置是空映射，只有接收门控在通信服务内部执行，其余业务在未接入前返回错误7。空配置不能视为19条业务指令已实现。
 
 配置文件由管理员维护，不从RS422上传。`actions`将设计稿中的action名称映射到固定绝对路径argv。调用时标准输入为UTF-8 JSON：
