@@ -110,7 +110,9 @@ def ipv4(name):
 
 
 class Serial:
-    def __init__(self, path):
+    def __init__(self, path, baud=9600, parity='N', stop_bits=1):
+        if baud not in (9600, 19200, 38400, 57600, 115200) or parity not in ('N', 'E', 'O') or stop_bits not in (1, 2):
+            raise ValueError('unsupported UART parameters')
         self.fd = os.open(path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK | os.O_CLOEXEC)
         self.saved = None
         try:
@@ -121,7 +123,14 @@ class Serial:
             attr = termios.tcgetattr(self.fd)
             attr[0] = attr[1] = attr[3] = 0
             attr[2] = termios.CLOCAL | termios.CREAD | termios.CS8
-            attr[4] = attr[5] = termios.B9600
+            if parity != 'N':
+                attr[0] = termios.INPCK | termios.IGNPAR
+                attr[2] |= termios.PARENB
+                if parity == 'O':
+                    attr[2] |= termios.PARODD
+            if stop_bits == 2:
+                attr[2] |= termios.CSTOPB
+            attr[4] = attr[5] = getattr(termios, 'B' + str(baud))
             attr[6][termios.VMIN] = 0
             attr[6][termios.VTIME] = 0
             termios.tcsetattr(self.fd, termios.TCSANOW, attr)

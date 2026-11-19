@@ -1,0 +1,20 @@
+[Unit]
+Description=Experimental satellite RS422 binary protocol
+After=NetworkManager.service
+Conflicts=gs422.service shanhe-serial.service rs422.service
+
+[Service]
+Type=simple
+WorkingDirectory=/usr/lib/gs422
+ExecStart=/usr/bin/python3 -m gs422.space_service --config /etc/gs422.conf
+User=root
+UMask=0077
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+PrivateTmp=true
+TimeoutStopSec=50
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target
