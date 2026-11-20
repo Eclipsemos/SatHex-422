@@ -5,7 +5,7 @@
 ## 当前现场配置
 
 - 正式运行：gs422 2.6.0 AT服务、Docker29.1.3/overlay2、SSH；固定IP 192.168.137.2。
-- 新统一二进制服务：代码和配置模板已存在、临时systemd及PTY验证完成，尚未作为长期服务安装启用。
+- 新统一二进制服务：独立gs422-payload-lab 0.1.0~lab1已安装、安装后入口验证通过，目前inactive/disabled，外设和catalog未配全，未长期启用。
 - 默认可信软件catalog为空、外部source/sink/capture驱动未绑定、重启开关默认关闭。
 - 后摩卡按用户明确尚未安装；TMG007必须为后摩，不使用RK内置NPU替代。
 - 用户已确认第二只USB转RS422未连接；UART8仅验证设备存在/可打开，未验证物理收包。
@@ -111,3 +111,5 @@
 最新索引证据：PACKAGE-INDEX-ACCEPTANCE.md，158项测试通过。
 
 最新分段及查询证据见SEGMENTED-PROGRESS-PROFILE.md，162项测试通过。
+
+最新安装证据见LAB-PACKAGE-INSTALLATION.md；安装不等于配置成功。

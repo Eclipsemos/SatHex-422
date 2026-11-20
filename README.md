@@ -1,5 +1,7 @@
 # SatHex-422：自主串口服务 gs422
 
+[独立实验包](docs/LAB-PACKAGE-INSTALLATION.md)已在X26安装并验证，可与gs422 2.6.0共存；新服务默认禁用，外设驱动与可信软件目录尚未配置完整。
+
 [分段流与32H进度查询](docs/SEGMENTED-PROGRESS-PROFILE.md)已完成项目定义和主板回归，162项测试通过；真实COM3进度查询通过，物理上传仍未完成。
 
 [软件包索引验收](docs/PACKAGE-INDEX-ACCEPTANCE.md)：历史索引、初始F0恢复和重复请求保护已通过主板真实Docker测试，158项单元测试通过；现场catalog及全部硬件配置仍未完成。

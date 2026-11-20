@@ -37,10 +37,11 @@ def main():
            'records_root':str(root/'records'),'telemetry_file':str(snapshot),'telemetry_max_age':.6,
            'allow_fixture_telemetry':True,'catalog':{},'ota_capacity':10000,'enable_reboot':False}
         cfg=root/'config.json';cfg.write_text(json.dumps(c));process=log=None
+        service_command=['/usr/bin/gs422-payload-lab'] if '--installed' in sys.argv else [sys.executable,'-m','gs422.payload_service']
         def start():
             nonlocal process,log
             log=(root/'service.log').open('a')
-            process=subprocess.Popen([sys.executable,'-m','gs422.payload_service','--config',str(cfg)],cwd=ROOT,stdout=log,stderr=log)
+            process=subprocess.Popen(service_command+['--config',str(cfg)],cwd=ROOT,stdout=log,stderr=log)
             time.sleep(.5)
             assert process.poll() is None,(root/'service.log').read_text()
         def stop():
@@ -61,7 +62,7 @@ def main():
             assert not expect,'no response'
         def tm():return tmg.unpack(Message.parse(request(Message(0x11,1,0).wire())).body)
         try:
-            check=subprocess.run([sys.executable,'-m','gs422.payload_service','--config',str(cfg),'--check-config'],cwd=ROOT,capture_output=True)
+            check=subprocess.run(service_command+['--config',str(cfg),'--check-config'],cwd=ROOT,capture_output=True)
             assert check.returncode==0,check.stderr
             start();assert tm()['TMG006']==40
             assert request(control(0x30,0x17,b'\x01'+bytes(5)))==b'\x31\x17\x00'
