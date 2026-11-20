@@ -21,6 +21,17 @@ class LegacyActions:
         self.timeout = delegate.timeout
 
     def execute(self, action, parameters):
+        if action == 'ota_upload' and self.runtime.legacy_upload is not None:
+            import json
+            with self.runtime.ota_lock:
+                if self.runtime.upload_profile == 'modern' and self.runtime.staging.state['status'] == 0x20:
+                    raise CommandError(6)
+                self.runtime.upload_profile = 'legacy'
+                try:
+                    result = self.runtime.legacy_upload.receive(parameters)
+                finally:
+                    self.runtime._snapshot()
+                return json.dumps(result).encode()
         if action == 'firmware_version':
             import json
             version = self.runtime.software_backend.version() if self.runtime.software_backend else self.runtime.version
@@ -35,13 +46,15 @@ class LegacyActions:
 
 class Revised:
     def __init__(self, staging, sensors, raw_telemetry, *, version, adapter=None, clock=time.monotonic,
-                 software_backend=None, algorithms_enabled=False):
+                 software_backend=None, algorithms_enabled=False, legacy_upload=None):
         if staging.profile != 'CCITT-FALSE':
             raise ValueError('agreed profile requires CRC-16/CCITT-FALSE')
         tmg.pack(raw_telemetry, algorithms_enabled=algorithms_enabled)
         version_reply(version)
         self.staging, self.version, self.clock = staging, version, clock
         self.software_backend = software_backend
+        self.legacy_upload = legacy_upload
+        self.upload_profile = 'modern'
         self.algorithms_enabled = algorithms_enabled
         self.raw = dict(raw_telemetry)
         self.started = clock()
@@ -61,7 +74,8 @@ class Revised:
         self._snapshot()
 
     def _snapshot(self):
-        snapshot = self.staging.snapshot()
+        snapshot = (self.legacy_upload.snapshot() if self.upload_profile == 'legacy' and self.legacy_upload is not None
+                    else self.staging.snapshot())
         with self.lock:
             self.raw.update(snapshot)
             self.raw['TMG011'] = (snapshot['TMG011'] + self.upload_drops) & 0xffffffff
@@ -71,6 +85,8 @@ class Revised:
         # TYPE30/17 retains its independent 01=open,02=close parameter syntax.
         with self.ota_lock:
             self.staging.gate(mode == 2)
+            if mode == 0 and self.legacy_upload is not None:
+                self.legacy_upload.reset()
             self._snapshot()
 
     def run_ota(self, action, parameters):
@@ -79,9 +95,12 @@ class Revised:
                 self.staging.gate(parameters['enabled'])
                 result = 0
             elif action == 'begin':
-                if self.software_backend and not self.software_backend.permits(parameters):
+                if self.legacy_upload and self.legacy_upload.state['status'] == 0x20:
+                    result = 1
+                elif self.software_backend and not self.software_backend.permits(parameters):
                     result = 2
                 else:
+                    self.upload_profile = 'modern'
                     result = self.staging.begin(**parameters)
             elif action == 'end':
                 result = self.staging.end(**parameters)

@@ -24,6 +24,9 @@ from gs422.revised_runtime import Revised
 from gs422.dual_uart import DualUART
 from gs422.space_protocol import Message,Decoder
 from gs422.ota_wire import file_packets
+from gs422.legacy_upload import LegacyUpload
+from gs422.space_protocol import fragments
+import binascii
 
 
 class CaptureFixture:
@@ -50,8 +53,9 @@ def main():
         capture=CaptureFixture()
         files=FileServices(root/'files',sources={7:source},sinks={1:sink(one),2:sink(two)},capture_driver=capture)
         staging=Staging(root/'ota',crc_profile='CCITT-FALSE',capacity=10000)
+        old_upload=LegacyUpload(root/'legacy')
         values={f.id:0 for f in tmg.FIELDS}
-        runtime=Revised(staging,Cache(5000),values,version='file-fixture',adapter=files)
+        runtime=Revised(staging,Cache(5000),values,version='file-fixture',adapter=files,legacy_upload=old_upload)
         cm,cs=pty.openpty();um,us=pty.openpty()
         transport=DualUART(runtime,os.ttyname(cs),os.ttyname(us));runtime.start()
         decoder=Decoder();seq=0
@@ -108,9 +112,26 @@ def main():
             until(lambda:runtime.raw['TMG010']==1)
             assert not select.select([um],[],[],0)[0]
             command(0x21,0x54,bytes(6));assert tm()['TMG014']==0x23;passed('K1117_shared_ota_end')
+            command(0x21,0x17,bytes(6))
+            command(0x21,0x17,b'\x02'+bytes(5))
+            data=bytes(range(256))*5
+            total=(len(data)+511)//512;crc=binascii.crc_hqx(data,0xffff)
+            for idx in (2,0,1):
+                block=data[idx*512:(idx+1)*512]
+                body=struct.pack('>IIIIIB',len(block),0,len(data),total,(total+7)//8,idx)+block+struct.pack('>HH',sum(block)&65535,crc)
+                seq+=1
+                for fragment in fragments(Message(0x25,seq,4,body)):
+                    os.write(cm,fragment.wire());transport.pump()
+                until(lambda:runtime.legacy.executed+runtime.legacy.failures>=seq)
+                result=exchange(Message(0x15,600,0).wire()).body
+                assert result[4:7]==b'\x03\x00\x00',result
+            old_upload.export_verified(root/'legacy-result.bin')
+            assert (root/'legacy-result.bin').read_bytes()==data
+            assert tm()['TMG010']==3 and tm()['TMG014']==0x23
+            passed('D0351_fragmented_persistent_legacy_upload',bytes=len(data),packets=3)
             passed('scope',external_hardware='TEST_FIXTURES',physical_uart=False)
         finally:
-            runtime.close();transport.close();files.close();staging.close()
+            runtime.close();transport.close();files.close();staging.close();old_upload.close()
             for fd in (cm,cs,um,us):os.close(fd)
 
 
