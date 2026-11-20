@@ -2,6 +2,8 @@
 
 2026-11-20。gs422.payload_service提供独立长运行入口，模式明确为lab。它组合DurableDemo、FileServices、LegacyUpload、Staging、Revised及DualUART，可选绑定BoardReboot；不自动启用，不覆盖已部署AT服务。
 
+后续用户确认传感器无效码，已新增gs422.measurements真实快照生产者及物理COM3测试，详见MEASURED-TELEMETRY-ACCEPTANCE.md。单项缺测可用明确无效码发布完整帧；整份快照缺失或过期仍按下文抑制遥测。
+
 ## 配置与检查
 
 参考config/gs422-payload-lab.example.json和deploy/gs422-payload-lab.service。完整配置必须包括两个不同UART绝对路径、互不嵌套的状态/记录目录、测量快照路径和最大年龄、显式fixture许可、本地可信镜像目录、OTA容量和重启开关。未知字段、路径重叠、伪布尔值、无界年龄、非不可变Docker image ID均拒绝。

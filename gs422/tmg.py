@@ -35,6 +35,7 @@ SIZE = offset // 8
 assert len(FIELDS) == 44 and offset % 8 == 0
 RESERVED = frozenset(('TMG042', 'TMG043', 'TMG044'))
 ALGORITHMS = frozenset(f'TMG{i:03}' for i in range(15, 34))
+INVALID = {'TMG005': 0xffff, 'TMG006': 0xff, 'TMG007': 0xff, 'TMG034': 0xffff}
 
 
 def pack(values, *, algorithms_enabled=False):
@@ -73,9 +74,17 @@ def raw_value(identifier, physical):
         raise ValueError('invalid physical value')
     scale = Decimal('0.01') if identifier in ('TMG005', 'TMG034') else Decimal(1)
     raw = int((value / scale).quantize(Decimal(1), rounding=ROUND_HALF_UP))
-    if raw >= (1 << BY_ID[identifier].bits):
+    if raw >= INVALID[identifier]:
         raise ValueError('physical value out of wire range')
     return raw
+
+
+def physical_value(identifier, raw):
+    """Decode approved sensor invalid markers as None, never as 255C/655.35W."""
+    if identifier not in INVALID or type(raw) is not int or not 0 <= raw <= INVALID[identifier]:
+        raise ValueError('invalid raw sensor value')
+    if raw == INVALID[identifier]:return None
+    return raw / 100 if identifier in ('TMG005','TMG034') else raw
 
 
 def split_storage_bytes(value):
