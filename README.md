@@ -1,5 +1,7 @@
 # SatHex-422：自主串口服务 gs422
 
+[已配置的统一样例服务](docs/CONFIGURED-SAMPLE-SERVICE.md)已在主板安装并保存软件目录/文件驱动配置，真实COM3执行20次控制操作通过，164项单元测试通过。外设为用户确认的文件样例，实验服务测试后停止，正式AT仍运行。
+
 [独立实验包](docs/LAB-PACKAGE-INSTALLATION.md)已在X26安装并验证，可与gs422 2.6.0共存；新服务默认禁用，外设驱动与可信软件目录尚未配置完整。
 
 [分段流与32H进度查询](docs/SEGMENTED-PROGRESS-PROFILE.md)已完成项目定义和主板回归，162项测试通过；真实COM3进度查询通过，物理上传仍未完成。

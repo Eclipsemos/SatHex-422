@@ -4,6 +4,8 @@
 
 目标：完成全部遥测遥控指令检查测试并确认配置。状态：进行中，未完成，不合并main。
 
+最新配置：用户确认外设暂未接入、暂做软件样例。已安装lab2并保留sample-v1/v2可信包、F0和停止的基线容器；文件fixture驱动已绑定。真实COM3对安装后同一服务执行20次控制操作及版本/61B遥测全部成功，164项板上单测通过。见CONFIGURED-SAMPLE-SERVICE.md，当前恢复AT服务，实验服务配置保留但disabled。
+
 安装推进：独立gs422-payload-lab 0.1.0~lab1已在X26安装并完成安装后入口/生命周期验证，原AT配置hash不变。新服务保持disabled；check-config明确catalog=0、hardware_drivers=not_bound。真实配置前置条件见LAB-PACKAGE-INSTALLATION.md。已向用户询问星敏/固存/下传实际接入情况，等待答复。
 
 索引推进：04H历史/初始包注册与选择已实现，真实Docker测试中重启管理实例后历史索引稳定，F0恢复成功、未注册FF拒绝，重复同版本不重建容器。完整158项板上测试通过，见PACKAGE-INDEX-ACCEPTANCE.md；默认现场catalog仍未注册，物理上注与外设仍待验。

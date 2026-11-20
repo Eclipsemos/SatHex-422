@@ -33,7 +33,9 @@ def load_config(path):
     c=json.loads(Path(path).read_text())
     required={'mode','control_port','upload_port','state_root','records_root','telemetry_file',
               'telemetry_max_age','allow_fixture_telemetry','catalog','ota_capacity','enable_reboot'}
-    if set(c)!=required:raise ValueError('configuration keys do not match schema')
+    if not required<=set(c) or set(c)-required-{'fixture_io_root'}:raise ValueError('configuration keys do not match schema')
+    if c.get('fixture_io_root') is not None and (not isinstance(c['fixture_io_root'],str) or not Path(c['fixture_io_root']).is_absolute()):
+        raise ValueError('fixture IO root must be explicit absolute path')
     if c['mode']!='lab':raise ValueError('only explicitly labelled lab backend is implemented')
     for key in ('control_port','upload_port','state_root','records_root','telemetry_file'):
         if not isinstance(c[key],str) or not Path(c[key]).is_absolute():raise ValueError(key+' must be absolute')
@@ -80,7 +82,18 @@ def serve(c):
         # Require initial measurements before creating state or taking either UART.
         values,deadline=measurement_snapshot(c['telemetry_file'],c['telemetry_max_age'],c['allow_fixture_telemetry'])
         software=DurableDemo(root/'software',c['catalog'])
-        files=FileServices(c['records_root'])  # unbound hardware stays unavailable
+        fixture=None
+        if c.get('fixture_io_root'):
+            from .fixture_io import FixtureIO
+            fixture=FixtureIO(c['fixture_io_root'])
+            files=FileServices(c['records_root'],sources=fixture.sources,sinks=fixture.sinks,capture_driver=fixture)
+            LOG.warning('EXTERNAL_IO=FILE_FIXTURES not physical devices')
+            with files.lock:
+                if not files.db.execute('SELECT 1 FROM files WHERE type=2 AND complete=1').fetchone():
+                    fid=files.add_file([(10,b'fixture-alpha'),(10,b'fixture-beta')])
+                    LOG.info('FIXTURE_REPLAY_FILE_ID=%d',fid)
+        else:
+            files=FileServices(c['records_root'])  # unbound hardware stays unavailable
         reboot=BoardReboot(root/'reboot.json',enabled=True) if c['enable_reboot'] else None
         backend=PayloadBackend(software,files,reboot=reboot)
         staging=Staging(root/'ota',crc_profile='CCITT-FALSE',capacity=c['ota_capacity'])
@@ -131,7 +144,8 @@ def main():
         c=load_config(a.config)
         if a.check_config:
             print(json.dumps({'configuration':'valid','mode':c['mode'],'trusted_packages':len(c['catalog']),
-                              'hardware_drivers':'not_bound','fixture_telemetry':c['allow_fixture_telemetry']}))
+                              'hardware_drivers':'file_fixtures' if c.get('fixture_io_root') else 'not_bound',
+                              'fixture_telemetry':c['allow_fixture_telemetry']}))
             return 0
         serve(c)
         return 0
