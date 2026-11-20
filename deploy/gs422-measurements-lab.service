@@ -3,6 +3,8 @@ Description=SatHex configured measurement snapshot producer
 
 [Service]
 Type=simple
+Restart=on-failure
+RestartSec=5
 ExecStart=/usr/bin/gs422-measurements-lab --config /etc/gs422-measurements-lab.json --output /run/sathex-measurements.json
 User=root
 UMask=0077

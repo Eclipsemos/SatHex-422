@@ -4,9 +4,9 @@
 
 ## 当前现场配置
 
-- 正式运行：gs422 2.6.0 AT服务、Docker29.1.3/overlay2、SSH；固定IP 192.168.137.2。
-- 新统一二进制服务：独立gs422-payload-lab 0.1.0~lab2已安装、安装后入口验证通过，目前inactive/disabled，可信sample-v1/v2和文件fixture已配置，测试后未长期启用。
-- 主板当前catalog有2个可信样例包，F0已注册；按用户确认绑定文件fixture外设，重启后端已明确启用，但服务测试后停止。仓库默认示例仍是空catalog/无fixture，不能混同。
+- 正式管理连接：Docker29.1.3/overlay2、SSH；固定IP 192.168.137.2。原gs4222.6.0 AT服务已停用，当前串口由统一样例服务使用。
+- 新统一二进制服务：独立gs422-payload-lab 0.1.0~lab3已安装且active/enabled，测量服务同样开机自启；可信sample-v1/v2和文件fixture已配置，实际重启后恢复通过。
+- 主板当前catalog有2个可信样例包，F0已注册；按用户确认绑定文件fixture外设，重启后端已明确启用，服务当前常驻运行。仓库默认示例仍是空catalog/无fixture，不能混同。
 - 后摩卡按用户明确尚未安装；TMG007必须为后摩，不使用RK内置NPU替代。
 - 用户已确认第二只USB转RS422未连接；UART8仅验证设备存在/可打开，未验证物理收包。
 
@@ -115,3 +115,5 @@
 最新安装证据见LAB-PACKAGE-INSTALLATION.md；安装不等于配置成功。
 
 最新主板安装后物理控制证据见CONFIGURED-SAMPLE-SERVICE.md；样例已持久配置但服务未开机启用。
+
+最新现场状态见SAMPLE-AUTOSTART-ACCEPTANCE.md，重启及63秒120帧物理查询通过，不能等同长期硬件验收。

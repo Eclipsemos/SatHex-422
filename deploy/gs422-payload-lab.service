@@ -1,17 +1,20 @@
 [Unit]
 Description=SatHex explicitly configured laboratory payload service
-After=network.target docker.service
-Wants=docker.service
+After=network.target docker.service gs422-measurements-lab.service
+Requires=docker.service gs422-measurements-lab.service
 Conflicts=gs422.service gs422-space.service rs422.service shanhe-serial.service
 
 [Service]
 Type=simple
 WorkingDirectory=/usr/lib/gs422-payload-lab
+ExecStartPre=/usr/bin/gs422-measurements-lab --config /etc/gs422-measurements-lab.json --output /run/sathex-measurements.json --once
 ExecStart=/usr/bin/gs422-payload-lab --config /etc/gs422-payload-lab.json
 User=root
 UMask=0077
 KillMode=control-group
 TimeoutStopSec=75
+Restart=on-failure
+RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true

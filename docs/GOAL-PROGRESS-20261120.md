@@ -4,6 +4,8 @@
 
 目标：完成全部遥测遥控指令检查测试并确认配置。状态：进行中，未完成，不合并main。
 
+最新常驻配置：已切换到lab3统一样例二进制服务并启用测量/载荷自启；RTC写入当前UTC，物理K1109重启后自动恢复，120帧连续COM3查询校验全部通过。当前串口115200/8N1，原AT停用可回退。见SAMPLE-AUTOSTART-ACCEPTANCE.md；短时稳定不代替物理上注和完整硬件验收。
+
 最新配置：用户确认外设暂未接入、暂做软件样例。已安装lab2并保留sample-v1/v2可信包、F0和停止的基线容器；文件fixture驱动已绑定。真实COM3对安装后同一服务执行20次控制操作及版本/61B遥测全部成功，164项板上单测通过。见CONFIGURED-SAMPLE-SERVICE.md，当前恢复AT服务，实验服务配置保留但disabled。
 
 安装推进：独立gs422-payload-lab 0.1.0~lab1已在X26安装并完成安装后入口/生命周期验证，原AT配置hash不变。新服务保持disabled；check-config明确catalog=0、hardware_drivers=not_bound。真实配置前置条件见LAB-PACKAGE-INSTALLATION.md。已向用户询问星敏/固存/下传实际接入情况，等待答复。
