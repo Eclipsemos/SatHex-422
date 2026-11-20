@@ -1,5 +1,10 @@
 # SatHex-422：自主串口服务 gs422
 
+20261119新遥控/遥测与OTA资料的[设计入口及待确认冲突](docs/REVISION-20261119.md)、
+[44字段布局](docs/TMG-LAYOUT-20261119.md)、[来源清单](docs/spec-20261119.json)。
+新增OTA编解码与暂存为离线参考组件，尚未接入现场UART；Flash后端与全功能实机验收尚未完成。
+本次[阶段验收记录](docs/ACCEPTANCE-20261119.md)：Linux 103项测试通过，协议冲突与未接入业务单独列出，整体功能验收尚未通过。
+
 本开发分支包含试验星01二进制协议原型：[帧分配草案](docs/SATELLITE-FRAMES.md)、
 [业务执行器接口与未接入范围](docs/SPACE-ADAPTERS.md)、[联调记录](docs/SPACE-VALIDATION.md)。
 原型为独立入口，不默认切换现有AT服务；业务执行器尚待接入，不能作为完整载荷功能验收。

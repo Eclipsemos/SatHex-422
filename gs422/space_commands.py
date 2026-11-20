@@ -1,5 +1,6 @@
 """Strict validation of the supplied 感算 K/D sheets; no hardware effects."""
 import struct
+from .ota_wire import validate_control
 
 K_EMPTY = {0x87: 'software_resume', 0x80: 'software_stop', 0x84: 'board_reboot',
            0x13: 'storage_clean', 0x42: 'playback_start', 0x43: 'playback_stop',
@@ -20,6 +21,16 @@ def require(condition):
 def validate(message):
     kind, code, body = message.kind, message.code, message.body
     if kind == 0x21:
+        if code in (0x53, 0x54, 0x55, 0x56):
+            # K1119 is no-parameter in the workbook; OTA TYPE30 uses six zeros.
+            if code == 0x56:
+                require(not body)
+                return 'firmware_version', {}
+            try:
+                action, parameters = validate_control(bytes((0x30, code)) + body)
+            except ValueError:
+                raise CommandError(4)
+            return 'ota_' + action, parameters
         if code in K_EMPTY:
             require(not body)
             return K_EMPTY[code], {}
