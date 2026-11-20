@@ -15,12 +15,15 @@ from .ota_wire import validate_control, reply, version_reply
 
 
 class Revised:
-    def __init__(self, staging, sensors, raw_telemetry, *, version, adapter=None, clock=time.monotonic):
+    def __init__(self, staging, sensors, raw_telemetry, *, version, adapter=None, clock=time.monotonic,
+                 software_backend=None, algorithms_enabled=False):
         if staging.profile != 'CCITT-FALSE':
             raise ValueError('agreed profile requires CRC-16/CCITT-FALSE')
-        tmg.pack(raw_telemetry)
+        tmg.pack(raw_telemetry, algorithms_enabled=algorithms_enabled)
         version_reply(version)
         self.staging, self.version, self.clock = staging, version, clock
+        self.software_backend = software_backend
+        self.algorithms_enabled = algorithms_enabled
         self.raw = dict(raw_telemetry)
         self.started = clock()
         self.lock = threading.RLock()
@@ -44,7 +47,7 @@ class Revised:
 
     def update_telemetry(self, values):
         # Caller owns measurement freshness, UTC synchronization and missing-data policy.
-        tmg.pack(values)
+        tmg.pack(values, algorithms_enabled=self.algorithms_enabled)
         with self.lock:
             self.raw.update(values)
         self._snapshot()
@@ -55,7 +58,7 @@ class Revised:
             values.update(TMG001=self.correct & 255, TMG002=self.incorrect & 255,
                           TMG003=self.bus_errors & 255,
                           TMG040=int(max(0, self.clock() - self.started)) & 255)
-        return Message(0x12, seq, 0, tmg.pack(values)).wire()
+        return Message(0x12, seq, 0, tmg.pack(values, algorithms_enabled=self.algorithms_enabled)).wire()
 
     def feed_control(self, data=b''):
         responses = bytearray()
@@ -70,7 +73,8 @@ class Revised:
                     continue
                 self.correct += 1
                 if action == 'version':
-                    responses.extend(version_reply(self.version))
+                    version = self.software_backend.version() if self.software_backend else self.version
+                    responses.extend(version_reply(version))
                 else:
                     try:
                         self.operations.put_nowait(('control', payload, action, parameters))
@@ -144,9 +148,14 @@ class Revised:
                     self.staging.gate(parameters['enabled'])
                     result = 0
                 elif action == 'begin':
-                    result = self.staging.begin(**parameters)
+                    if self.software_backend and not self.software_backend.permits(parameters):
+                        result = 2
+                    else:
+                        result = self.staging.begin(**parameters)
                 elif action == 'end':
                     result = self.staging.end(**parameters)
+                elif action in ('load', 'erase') and self.software_backend:
+                    result = self.software_backend.ota(action, parameters, self.staging)
                 else:
                     result = 0xff  # erase/load require a real partition backend
                 self.replies.put_nowait(reply(payload[1], result))

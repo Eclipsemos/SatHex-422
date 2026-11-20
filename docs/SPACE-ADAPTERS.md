@@ -1,5 +1,7 @@
 # 本机业务执行器接口
 
+用户后续授权用样例验证部署和算法，新增显式选择的DemoDocker后端：仅task_id=1的CPU求和样例、软件v1/v2和故障包，不填入默认actions。样例实际验收与正式业务缺口见[验收记录](DEMO-ACCEPTANCE-20261120.md)。
+
 2026-11-19范围更新：按用户要求，task_start/task_stop/task_pause/software_resume/software_stop五个算法相关映射明确留空，不提供假算法。非算法业务继续按[业务设计草案](PAYLOAD-SERVICES-DESIGN.md)开发；其中新增服务和遥测页目前属于设计，尚未接入执行器。
 
 实验入口：`python3 -m gs422.space_service --config /etc/gs422.conf --adapters /etc/gs422-space-adapters.json`。示例配置是空映射，只有接收门控在通信服务内部执行，其余业务在未接入前返回错误7。空配置不能视为19条业务指令已实现。
