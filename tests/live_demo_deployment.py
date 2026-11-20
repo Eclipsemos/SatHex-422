@@ -17,12 +17,14 @@ import tarfile
 import tempfile
 import time
 import uuid
+import contextlib
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from gs422 import tmg
 from gs422.core import Cache
 from gs422.demo_docker import DemoDocker
+from gs422.durable_demo import DurableDemo
 from gs422.dual_uart import DualUART
 from gs422.ota_staging import Staging
 from gs422.ota_wire import control, file_packets
@@ -60,6 +62,7 @@ def main():
     backend = runtime = transport = staging = None
     descriptors = []
     token = uuid.uuid4().hex[:10]
+    temp = tempfile.TemporaryDirectory(prefix='sathex-demo-')
     def docker(*args):
         return subprocess.check_output(['docker', *args], text=True, stderr=subprocess.STDOUT, timeout=45).strip()
     def passed(name, **detail):
@@ -67,7 +70,7 @@ def main():
         records.append(entry)
         print(json.dumps(entry), flush=True)
     try:
-        with tempfile.TemporaryDirectory(prefix='sathex-demo-') as folder:
+        with contextlib.nullcontext(temp.name) as folder:
             base = Path(folder)
             source = base/'sample.c'; source.write_text(CODE)
             catalog, packages = {}, {}
@@ -89,7 +92,8 @@ def main():
                 packages[version] = data
             passed('local_software_images_built', architecture=os.uname().machine, versions=list(packages))
             staging = Staging(base/'staging', crc_profile='CCITT-FALSE', capacity=8*1024*1024)
-            backend = DemoDocker(base/'backend', catalog)
+            backend_class = DurableDemo if '--durable' in sys.argv else DemoDocker
+            backend = backend_class(base/'backend', catalog)
             raw = {f.id:0 for f in tmg.FIELDS}
             runtime = Revised(staging, Cache(5000), raw, version='UNCONFIGURED', adapter=backend,
                               software_backend=backend, algorithms_enabled=True)
@@ -146,6 +150,35 @@ def main():
             assert ota(0x56,bytes(6))==b'\x33\x56v1\x00'
             assert telemetry()['TMG014']==0x31
             passed('software_v1_activated', container=backend.software)
+            if '--durable' in sys.argv:
+                old_id=backend.software
+                backend.close()
+                backend=DurableDemo(base/'backend',catalog)
+                runtime.software_backend=backend;runtime.legacy.adapter.delegate=backend
+                assert backend.version()=='v1' and backend.software==old_id
+                passed('durable_manager_reopen_keeps_v1')
+                # Crash a separate process after stopping v1 and creating v2,
+                # before committing activation. Its owner lock is released by OS.
+                catalog_file=base/'catalog.json';catalog_file.write_text(json.dumps(catalog))
+                backend.close()
+                code="""import json,os,sys
+from gs422.durable_demo import DurableDemo
+b=DurableDemo(sys.argv[1],json.load(open(sys.argv[2])))
+b._save('activation')
+b.runner('stop','-t','2',b.software)
+entry=next(x for x in b.catalog.values() if x['version']=='v2')
+b._create(entry['image_id'],'service')
+os._exit(23)
+"""
+                child=subprocess.run([sys.executable,'-c',code,str(base/'backend'),str(catalog_file)],cwd=ROOT,timeout=30)
+                assert child.returncode==23,child.returncode
+                backend=DurableDemo(base/'backend',catalog)
+                runtime.software_backend=backend;runtime.legacy.adapter.delegate=backend
+                assert backend.version()=='v1' and backend.software==old_id
+                assert json.loads(docker('inspect',old_id))[0]['State']['Running']
+                found=docker('ps','-aq','--no-trunc','--filter','label=sathex.demo='+backend.prefix).split()
+                assert found==[old_id],found
+                passed('durable_abrupt_process_exit_rolls_back_v1')
             assert command(0x83,bytes([1,0,1,2,0,0]))==(3,0)
             pump_until(lambda:'SUM=5050' in docker('logs','--tail','3',backend.task))
             assert telemetry()['TMG032']==1
@@ -180,6 +213,14 @@ def main():
             assert json.loads(docker('inspect',backend.software))[0]['State']['Running']
             assert telemetry()['TMG014']==0x40
             passed('failed_upgrade_rolls_back_v2')
+            if '--durable' in sys.argv:
+                candidate=base/'backend'/'candidate-1'/'package.tar'
+                assert candidate.exists()
+                retained=backend.slots[1].copy()
+                assert ota(0x55,bytes([1,1,0,0,0,0]))==b'\x31\x55\x00'
+                assert not candidate.exists() and backend.slots[1]==retained
+                assert backend.version()=='v2'
+                passed('nonactive_candidate_files_erased_retained_version_preserved')
             assert command(0x83,bytes([2,0,1,2,0,0]))==(5,4)
             passed('unmapped_algorithm_rejected')
             # Cover every workbook row without substituting mocks for missing hardware.
@@ -203,10 +244,13 @@ def main():
     finally:
         if runtime:runtime.close()
         if transport:transport.close()
-        if backend:backend.cleanup()
+        if backend:
+            backend.cleanup()
+            if isinstance(backend,DurableDemo):backend.close()
         if staging:staging.close()
         for fd in descriptors:os.close(fd)
         for image in images:docker('image','rm',image)
+        temp.cleanup()
         print(json.dumps(dict(test='cleanup',containers='removed',images='removed')),flush=True)
 
 

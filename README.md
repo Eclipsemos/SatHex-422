@@ -1,5 +1,7 @@
 # SatHex-422：自主串口服务 gs422
 
+[软件持久化与候选清理](docs/DURABLE-SOFTWARE-ACCEPTANCE.md)已完成真实Docker进程中断恢复测试，主板140项单元测试通过；统一部署与全部硬件验收仍进行中。
+
 [K1109整板重启](docs/K1109-REBOOT-ACCEPTANCE.md)已通过真实COM3验收，重启后IP、Docker、SSH、AT服务恢复；板上135项单元测试通过。全部业务配置目标仍未完成。
 
 新增[旧D0351显式接收配置](docs/LEGACY-D0351-PROFILE.md)，主板131项单元测试及12项文件业务路径通过；收到文件不等于激活软件，全目标仍进行中。
