@@ -1,5 +1,7 @@
 # SatHex-422：自主串口服务 gs422
 
+[统一执行器样例验收](docs/UNIFIED-PAYLOAD-ACCEPTANCE.md)：主板144项单元测试通过，22项非重启遥控在同一实例执行业务成功。正式现场配置和真实外设验收仍未完成。
+
 [软件持久化与候选清理](docs/DURABLE-SOFTWARE-ACCEPTANCE.md)已完成真实Docker进程中断恢复测试，主板140项单元测试通过；统一部署与全部硬件验收仍进行中。
 
 [K1109整板重启](docs/K1109-REBOOT-ACCEPTANCE.md)已通过真实COM3验收，重启后IP、Docker、SSH、AT服务恢复；板上135项单元测试通过。全部业务配置目标仍未完成。

@@ -18,6 +18,9 @@ import tempfile
 import time
 import uuid
 import contextlib
+import struct
+import zlib
+import binascii
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -30,6 +33,10 @@ from gs422.ota_staging import Staging
 from gs422.ota_wire import control, file_packets
 from gs422.revised_runtime import Revised
 from gs422.space_protocol import Decoder, Message
+from gs422.space_protocol import fragments
+from gs422.file_services import FileServices
+from gs422.payload_backend import PayloadBackend
+from gs422.legacy_upload import LegacyUpload
 
 CODE = r'''
 #include <stdio.h>
@@ -60,6 +67,8 @@ def main():
         raise SystemExit('Run explicitly with sudo')
     records, images = [], []
     backend = runtime = transport = staging = None
+    files=legacy_upload=combined=None
+    memory_temp=None
     descriptors = []
     token = uuid.uuid4().hex[:10]
     temp = tempfile.TemporaryDirectory(prefix='sathex-demo-')
@@ -94,9 +103,35 @@ def main():
             staging = Staging(base/'staging', crc_profile='CCITT-FALSE', capacity=8*1024*1024)
             backend_class = DurableDemo if '--durable' in sys.argv else DemoDocker
             backend = backend_class(base/'backend', catalog)
+            adapter=backend
+            if '--unified' in sys.argv:
+                memory_temp=tempfile.TemporaryDirectory(prefix='sathex-unified-',dir='/dev/shm')
+                def sink(path):
+                    def write(data,cancel):
+                        if not cancel.is_set():
+                            with path.open('ab') as f:f.write(data);f.flush();os.fsync(f.fileno())
+                    return write
+                def solid(start,count,cancel):
+                    frames=[b'solid-0',b'solid-1',b'solid-2']
+                    for data in frames[start:None if count==0 else start+count]:
+                        if cancel.is_set():return
+                        yield data,zlib.crc32(data)
+                class Star:
+                    def start(self,mode,receiver):self.receiver=receiver
+                    def stop(self):self.receiver=None
+                star=Star()
+                files=FileServices(memory_temp.name,sources={7:solid},sinks={1:sink(base/'link1'),2:sink(base/'link2')},capture_driver=star)
+                legacy_upload=LegacyUpload(base/'legacy')
+                combined=PayloadBackend(backend,files)
+                adapter=combined
             raw = {f.id:0 for f in tmg.FIELDS}
-            runtime = Revised(staging, Cache(5000), raw, version='UNCONFIGURED', adapter=backend,
-                              software_backend=backend, algorithms_enabled=True)
+            runtime = Revised(staging, Cache(5000), raw, version='UNCONFIGURED', adapter=adapter,
+                              software_backend=adapter, algorithms_enabled=True,legacy_upload=legacy_upload)
+            def rebind_software():
+                if combined:
+                    combined.software=backend
+                else:
+                    runtime.software_backend=backend;runtime.legacy.adapter.delegate=backend
             cm, cs = pty.openpty(); um, us = pty.openpty()
             descriptors = [cm, cs, um, us]
             runtime.start()
@@ -120,7 +155,7 @@ def main():
             def ota(code, body):
                 return exchange(control(0x30,code,body))
             def telemetry():
-                raw.update(backend.telemetry());runtime.update_telemetry(raw)
+                raw.update(combined.telemetry() if combined else backend.telemetry());runtime.update_telemetry(raw)
                 return tmg.unpack(Message.parse(exchange(Message(0x11,500,0).wire())).body)
             seq=0
             def command(code, body=b'', kind=0x21):
@@ -154,7 +189,7 @@ def main():
                 old_id=backend.software
                 backend.close()
                 backend=DurableDemo(base/'backend',catalog)
-                runtime.software_backend=backend;runtime.legacy.adapter.delegate=backend
+                rebind_software()
                 assert backend.version()=='v1' and backend.software==old_id
                 passed('durable_manager_reopen_keeps_v1')
                 # Crash a separate process after stopping v1 and creating v2,
@@ -173,7 +208,7 @@ os._exit(23)
                 child=subprocess.run([sys.executable,'-c',code,str(base/'backend'),str(catalog_file)],cwd=ROOT,timeout=30)
                 assert child.returncode==23,child.returncode
                 backend=DurableDemo(base/'backend',catalog)
-                runtime.software_backend=backend;runtime.legacy.adapter.delegate=backend
+                rebind_software()
                 assert backend.version()=='v1' and backend.software==old_id
                 assert json.loads(docker('inspect',old_id))[0]['State']['Running']
                 found=docker('ps','-aq','--no-trunc','--filter','label=sathex.demo='+backend.prefix).split()
@@ -234,6 +269,47 @@ os._exit(23)
                 kind,code,body,_=CASES[key]
                 assert command(code,body,kind)==(3,0)
                 passed('workbook_'+key)
+            if '--unified' in sys.argv:
+                fid=files.add_file([(10,b'alpha'),(10,b'beta')])
+                assert command(0x40,struct.pack('>BBIIIH',3,2,0,100,9,0),0x25)==(3,0)
+                assert command(0x41,struct.pack('>IIIBH',fid,0,1,1,0),0x25)==(3,0)
+                assert command(0x42)==(3,0)
+                pump_until(lambda:files.play_state==2)
+                assert (base/'link1').read_bytes()==(base/'link2').read_bytes()==b'alphabeta'
+                assert telemetry()['TMG036']==2
+                assert command(0x43)==(3,0)
+                passed('unified_D0352_D0353_K1111_K1112')
+                assert command(0x50,bytes([7,1,0,0,0,0]),0x25)==(3,0)
+                pump_until(lambda:files.store_state==2)
+                assert telemetry()['TMG037']==2 and telemetry()['TMG038']==14
+                assert command(0x52)==(3,0);assert command(0x51)==(3,0)
+                passed('unified_D0354_K1114_K1113')
+                assert command(0x32,bytes([1,0,3,0,0,0]))==(3,0)
+                star.receiver(b'star-record',20)
+                # Same composition refuses software erase while recording.
+                assert ota(0x55,bytes([1,1,0,0,0,0]))==b'\x31\x55\x01'
+                assert command(0x32,bytes([2,0,3,0,0,0]))==(3,0)
+                assert command(0x13)==(3,0)
+                assert files.db.execute('SELECT count(*) FROM files').fetchone()[0]==0
+                passed('unified_K1115_K1110_and_cross_operation_busy')
+                assert command(0x55,bytes([1,1,0,0,0,0]))==(3,0)
+                passed('unified_K1118_candidate_cleanup')
+                assert command(0x53,bytes([3,1,2,0,0,0]))==(3,0)
+                os.write(um,list(file_packets(b'file','CCITT-FALSE'))[0])
+                pump_until(lambda:runtime.raw['TMG010']==1)
+                assert command(0x54,bytes(6))==(3,0)
+                assert telemetry()['TMG014']==0x23
+                passed('unified_K1116_K1117')
+                assert command(0x17,bytes(6))==(3,0)
+                assert command(0x17,b'\x02'+bytes(5))==(3,0)
+                data=b'legacy-file'
+                body=struct.pack('>IIIIIB',len(data),0,len(data),1,1,0)+data+struct.pack('>HH',sum(data),binascii.crc_hqx(data,0xffff))
+                assert command(4,body,0x25)==(3,0)
+                legacy_upload.export_verified(base/'legacy-result')
+                assert (base/'legacy-result').read_bytes()==data
+                assert telemetry()['TMG014']==0x23
+                passed('unified_D0351')
+                covered.update(CASES.keys()-{'K1109'})
             for key,(kind,code,body,_) in CASES.items():
                 if key in covered:continue
                 status,error=command(code,body,kind)
@@ -244,6 +320,8 @@ os._exit(23)
     finally:
         if runtime:runtime.close()
         if transport:transport.close()
+        if files:files.close()
+        if legacy_upload:legacy_upload.close()
         if backend:
             backend.cleanup()
             if isinstance(backend,DurableDemo):backend.close()
@@ -251,6 +329,7 @@ os._exit(23)
         for fd in descriptors:os.close(fd)
         for image in images:docker('image','rm',image)
         temp.cleanup()
+        if memory_temp:memory_temp.cleanup()
         print(json.dumps(dict(test='cleanup',containers='removed',images='removed')),flush=True)
 
 
