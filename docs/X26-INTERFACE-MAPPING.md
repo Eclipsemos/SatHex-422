@@ -33,4 +33,4 @@ DualUART绑定gs422.revised_runtime.Revised实例，分别调用feed_control与f
 
 ## 尚需补充
 
-通信入口已经有依据。用户已授权自主设计存储映射，具体boot1/boot2、APP1/APP2、eMMC1/eMMC2及允许擦写范围、回退见[X26存储设计提案](X26-OTA-STORAGE-DESIGN.md)，属于新方案，等待用户评审而非厂商现成定义。算法按用户要求留空；星敏、固存、回放外部接口也不在此DOCX内。
+通信入口已经有依据。用户已授权自主设计存储映射，按用户最新要求仅更新载荷软件，APP1/APP2映射eMMC中的软件主备目录，boot1/boot2保留；目录清理与业务回退见[软件存储设计](X26-OTA-STORAGE-DESIGN.md)。算法按用户要求留空；星敏、固存、回放外部接口也不在此DOCX内。

@@ -1,11 +1,11 @@
 {
-  "status": "DESIGN_ARITHMETIC_PASS_NOT_HARDWARE_ACCEPTANCE",
-  "partition_count_proposed": 5,
-  "disk_bytes": 125074145280,
-  "preserved_prefix_mib": 368,
-  "data_partition_gib": 67.62109375,
-  "data_budgets_gib": 66,
-  "tail_reserve_bytes": 4194304,
-  "max_segmented_component_gib": 31.875,
-  "image_transfer_minimum_days": 19.461534465020577
+  "status": "DESIGN_SCOPE_CHECK_ONLY_NOT_IMPLEMENTATION_ACCEPTANCE",
+  "scope": "payload_software",
+  "partition_changes": false,
+  "boot_components_reserved": [
+    1,
+    2
+  ],
+  "slots_are_directories": true,
+  "replaces": "previous system A/B partition arithmetic; no longer applicable"
 }

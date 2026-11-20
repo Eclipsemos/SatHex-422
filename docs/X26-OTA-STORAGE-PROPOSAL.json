@@ -1,104 +1,38 @@
 {
-  "schema": 1,
-  "status": "PROPOSED_NOT_APPLIED",
+  "schema": 2,
+  "status": "SOFTWARE_ONLY_PROPOSAL_NOT_APPLIED",
   "apply_enabled": false,
-  "disk_size_observed_bytes": 125074145280,
-  "preserve_prefix_bytes": 385875968,
-  "factory_partitions": [
-    {
-      "name": "uboot",
-      "offset_bytes": 8388608,
-      "size_bytes": 4194304
-    },
-    {
-      "name": "misc",
-      "offset_bytes": 12582912,
-      "size_bytes": 4194304
-    },
-    {
-      "name": "boot",
-      "offset_bytes": 16777216,
-      "size_bytes": 67108864
-    },
-    {
-      "name": "recovery",
-      "offset_bytes": 83886080,
-      "size_bytes": 134217728
-    },
-    {
-      "name": "backup",
-      "offset_bytes": 218103808,
-      "size_bytes": 33554432
-    },
-    {
-      "name": "oem",
-      "offset_bytes": 251658240,
-      "size_bytes": 134217728
-    },
-    {
-      "name": "rootfs:grow",
-      "offset_bytes": 385875968,
-      "size_bytes": null
-    }
-  ],
-  "proposed_partitions": [
-    {
-      "label": "boot_a",
-      "start_bytes": 385875968,
-      "size_bytes": 268435456
-    },
-    {
-      "label": "rootfs_a",
-      "start_bytes": 654311424,
-      "size_bytes": 25769803776
-    },
-    {
-      "label": "boot_b",
-      "start_bytes": 26424115200,
-      "size_bytes": 268435456
-    },
-    {
-      "label": "rootfs_b",
-      "start_bytes": 26692550656,
-      "size_bytes": 25769803776
-    },
-    {
-      "label": "sathex_data",
-      "start_bytes": 52462354432,
-      "size_bytes": 72607596544
-    }
-  ],
+  "scope": "payload_software",
+  "repartition": false,
+  "os_update": false,
+  "reboot_board_on_apply": false,
+  "base_directory": "/var/lib/sathex",
   "slots": {
     "A": {
       "region": 1,
-      "boot_component": 1,
-      "app_component": 3,
-      "boot_label": "boot_a",
-      "app_label": "rootfs_a"
+      "component": 3,
+      "path": "/var/lib/sathex/software/slots/A"
     },
     "B": {
       "region": 2,
-      "boot_component": 2,
-      "app_component": 4,
-      "boot_label": "boot_b",
-      "app_label": "rootfs_b"
+      "component": 4,
+      "path": "/var/lib/sathex/software/slots/B"
     }
   },
+  "reserved_components": [
+    1,
+    2
+  ],
   "regions_disabled": [
     3,
     4
   ],
-  "data_budgets_gib": {
-    "inbox": 8,
-    "known_good_packages": 8,
-    "records": 32,
-    "state_and_logs": 2,
-    "free_reserve": 16
-  },
-  "packet_bytes": 512,
-  "packet_file_bytes": 499,
-  "baud": 115200,
-  "uart_bits_per_byte": 10,
-  "segment_bytes": 134217728,
-  "max_segments": 255
+  "active_pointer": "/var/lib/sathex/software/current",
+  "max_package_bytes": 268435456,
+  "max_unpacked_slot_bytes": 1073741824,
+  "history_budget_bytes": 1073741824,
+  "staging_reserve_bytes": 1073741824,
+  "state_logs_budget_bytes": 268435456,
+  "minimum_system_free_bytes": 4294967296,
+  "health_timeout_seconds": 60
 }
