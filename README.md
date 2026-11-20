@@ -1,5 +1,7 @@
 # SatHex-422：自主串口服务 gs422
 
+[后台服务配置与生命周期](docs/PAYLOAD-DAEMON-CONFIGURATION.md)已通过主板独立进程启停/续传/过期测量保护验证，147项单元测试通过；真实外设和测量源仍未全部配置。
+
 [统一执行器样例验收](docs/UNIFIED-PAYLOAD-ACCEPTANCE.md)：主板144项单元测试通过，22项非重启遥控在同一实例执行业务成功。正式现场配置和真实外设验收仍未完成。
 
 [软件持久化与候选清理](docs/DURABLE-SOFTWARE-ACCEPTANCE.md)已完成真实Docker进程中断恢复测试，主板140项单元测试通过；统一部署与全部硬件验收仍进行中。

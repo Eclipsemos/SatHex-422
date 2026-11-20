@@ -69,6 +69,7 @@ class Revised:
         self.correct = self.incorrect = self.bus_errors = 0
         self.upload_drops = 0
         self.failure = None
+        self.telemetry_deadline = None
         self.legacy = Controller(sensors, LegacyActions(self, adapter or Adapter()), clock=clock,
                                  gate_handler=self.set_legacy_gate)
         self._snapshot()
@@ -120,11 +121,16 @@ class Revised:
 
     def _telemetry(self, seq):
         with self.lock:
+            if self.telemetry_deadline is not None and self.clock() >= self.telemetry_deadline:
+                return b''  # No defined missing-value encoding: do not publish stale numbers.
             values = dict(self.raw)
             values.update(TMG001=self.correct & 255, TMG002=self.incorrect & 255,
                           TMG003=self.bus_errors & 255,
                           TMG040=int(max(0, self.clock() - self.started)) & 255)
         return Message(0x12, seq, 0, tmg.pack(values, algorithms_enabled=self.algorithms_enabled)).wire()
+
+    def set_telemetry_deadline(self, deadline):
+        with self.lock:self.telemetry_deadline=deadline
 
     def feed_control(self, data=b''):
         responses = bytearray()

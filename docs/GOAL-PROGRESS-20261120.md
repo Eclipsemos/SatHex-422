@@ -2,6 +2,8 @@
 
 目标：完成全部遥测遥控指令检查测试并确认配置。状态：进行中，未完成，不合并main。
 
+后台服务推进：新增payload_service配置检查与长运行入口、systemd模板，主板独立进程启停/上传续传和测量快照过期保护测试通过。完整147项单元测试通过。详见PAYLOAD-DAEMON-CONFIGURATION.md，尚未启用正式守护进程，真实驱动/测量源仍未配置完成。
+
 统一配置推进：PayloadBackend组合软件、算法、文件、回放、记录和固存驱动；主板同一Revised实例完成22项非重启指令样例业务，K1109沿用此前真实COM3重启证据。完整144项单测通过，详见UNIFIED-PAYLOAD-ACCEPTANCE.md。该组合仍在显式测试脚本内，尚未部署长期现场守护进程；外部驱动与传感器fixture不算实机通过。
 
 最新软件推进：DurableDemo持久化软件状态、独占锁及Docker所有权核对；独立更新子进程强制退出后恢复旧版，真实候选包scope1清理通过。完整140项板上单元测试、真实Docker部署回归通过。见DURABLE-SOFTWARE-ACCEPTANCE.md，仍不是整机断电/全业务验收。

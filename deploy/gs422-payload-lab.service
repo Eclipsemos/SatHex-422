@@ -1,0 +1,21 @@
+[Unit]
+Description=SatHex explicitly configured laboratory payload service
+After=network.target docker.service
+Wants=docker.service
+Conflicts=gs422.service gs422-space.service rs422.service shanhe-serial.service
+
+[Service]
+Type=simple
+WorkingDirectory=/usr/lib/gs422
+ExecStart=/usr/bin/python3 -m gs422.payload_service --config /etc/gs422-payload-lab.json
+User=root
+UMask=0077
+KillMode=control-group
+TimeoutStopSec=75
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+[Install]
+WantedBy=multi-user.target
