@@ -256,6 +256,24 @@ os._exit(23)
                 assert not candidate.exists() and backend.slots[1]==retained
                 assert backend.version()=='v2'
                 passed('nonactive_candidate_files_erased_retained_version_preserved')
+                old_entry=backend.slots[1].copy()
+                recovery=backend.archived_package(old_entry)
+                recovery_digest=hashlib.sha256(recovery.read_bytes()).hexdigest()
+                assert command(0x55,bytes([1,0,0,0,0,0]))==(3,0)
+                assert backend.slots[1] is None and backend.version()=='v2'
+                assert recovery.exists() and hashlib.sha256(recovery.read_bytes()).hexdigest()==recovery_digest
+                passed('K1118_nonactive_installed_release_erased_recovery_archive_kept')
+                # Restore via the ordinary upload/validate/load protocol, using
+                # bytes from the saved trusted package instead of original inputs.
+                original=packages['v1'];packages['v1']=recovery.read_bytes()
+                upload('v1',1)
+                assert ota(4,bytes(6))==b'\x31\x04\x00'
+                assert backend.version()=='v1'
+                packages['v1']=original
+                passed('archived_release_restored_through_ota')
+                # Return to v2 for the remaining assertions below.
+                upload('v2',2)
+                assert ota(4,bytes(6))==b'\x31\x04\x00'
             assert command(0x83,bytes([2,0,1,2,0,0]))==(5,4)
             passed('unmapped_algorithm_rejected')
             # Cover every workbook row without substituting mocks for missing hardware.

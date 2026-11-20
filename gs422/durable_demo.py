@@ -9,6 +9,7 @@ import hashlib
 import os
 from pathlib import Path
 import tempfile
+import shutil
 from .demo_docker import DemoDocker
 from .space_commands import CommandError
 
@@ -124,6 +125,8 @@ class DurableDemo(DemoDocker):
                     try:os.fsync(fd)
                     finally:os.close(fd)
                 return 0
+            if action=='erase' and args.get('scope')==0:
+                return self._erase_installed(args['region'])
             if action=='load' and staging.state.get('status')==0x23:
                 request=staging.state.get('request')
                 if request and (request[0],request[1]) in ((3,1),(4,2)) and request[1]!=self.active:
@@ -148,11 +151,67 @@ class DurableDemo(DemoDocker):
             with temp.open('rb') as f:
                 for block in iter(lambda:f.read(1024*1024),b''):h.update(block)
             if h.hexdigest() not in self.catalog:raise CommandError(7)
+            archive_dir=self.root/'packages'
+            if archive_dir.is_symlink():raise CommandError(7)
+            archive_dir.mkdir(exist_ok=True)
+            archive=archive_dir/(h.hexdigest()+'.tar')
+            if archive.exists():
+                if archive.is_symlink() or self._digest(archive)!=h.hexdigest():raise CommandError(7)
+            else:
+                # Immutable trusted recovery copy independent of replaceable candidate.
+                fd,name=tempfile.mkstemp(prefix='.package-',dir=archive_dir)
+                try:
+                    with os.fdopen(fd,'wb') as output,temp.open('rb') as source:
+                        shutil.copyfileobj(source,output);output.flush();os.fsync(output.fileno())
+                    os.replace(name,archive)
+                    fd=os.open(archive_dir,os.O_RDONLY|os.O_DIRECTORY)
+                    try:os.fsync(fd)
+                    finally:os.close(fd)
+                finally:
+                    if os.path.exists(name):os.unlink(name)
             os.replace(temp,directory/'package.tar')
             fd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY)
             try:os.fsync(fd)
             finally:os.close(fd)
         finally:temp.unlink(missing_ok=True)
+
+    @staticmethod
+    def _digest(path):
+        h=hashlib.sha256()
+        with Path(path).open('rb') as stream:
+            for block in iter(lambda:stream.read(1024*1024),b''):h.update(block)
+        return h.hexdigest()
+
+    def archived_package(self, entry):
+        """Local trusted resolver, not a wire path or implicit history index."""
+        matches=[digest for digest,value in self.catalog.items() if value==entry]
+        for digest in matches:
+            path=self.root/'packages'/(digest+'.tar')
+            if not path.is_symlink() and path.is_file() and self._digest(path)==digest:return path
+        raise CommandError(7)
+
+    def _erase_installed(self, region):
+        if region not in (1,2) or region==self.active:return 0xff
+        entry=self.slots[region]
+        if entry is None:return self.ota('erase',{'region':region,'scope':1},None)
+        # Never drop the sole old release unless its exact trusted archive survives.
+        try:self.archived_package(entry)
+        except (CommandError,OSError):return 0xff
+        candidates=[]
+        for cid in self.owned:
+            info=self._inspect_owned(cid)
+            if info['Image']==entry['image_id'] and info['Config'].get('Cmd')==['service']:
+                if cid in (self.software,self.task) or info['State']['Running']:return 0xff
+                candidates.append(cid)
+        if self.ota('erase',{'region':region,'scope':1},None):return 0xff
+        # Precommit marks slot absent; interrupted deletion leaves only stopped
+        # labelled orphan containers, removed by the existing recovery sweep.
+        for cid in candidates:self.owned.remove(cid)
+        self.slots[region]=None
+        if self.retained==region:self.retained=None
+        self._save('idle')
+        for cid in candidates:self.runner('rm',cid)
+        return 0
 
     def execute(self,action,parameters):
         with self.lock:

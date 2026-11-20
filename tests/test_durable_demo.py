@@ -9,6 +9,26 @@ from gs422.space_commands import CommandError
 
 @unittest.skipUnless(sys.platform.startswith('linux'),'flock and directory fsync')
 class DurableTests(unittest.TestCase):
+    def test_scope0_refuses_without_verified_recovery_archive(self):
+        with tempfile.TemporaryDirectory() as root:
+            b=self.make(root);b.active=2;b.retained=1;b.slots[1]={'version':'v1','image_id':'sha256:'+'a'*64}
+            self.assertEqual(b.ota('erase',{'region':1,'scope':0},None),255)
+            self.assertIsNotNone(b.slots[1]);self.assertEqual(b.retained,1);b.close()
+
+    def test_scope0_with_archive_preserves_other_files_and_active_slot(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as root:
+            data=b'trusted-image';digest=hashlib.sha256(data).hexdigest()
+            entry={'version':'v1','image_id':'sha256:'+'a'*64}
+            b=DurableDemo(root,{digest:entry},runner=lambda *args:'')
+            archive=Path(root)/'packages';archive.mkdir();(archive/(digest+'.tar')).write_bytes(data)
+            b.active=2;b.retained=1;b.slots[1]=entry
+            foreign=Path(root)/'keep.txt';foreign.write_text('keep')
+            self.assertEqual(b.ota('erase',{'region':1,'scope':0},None),0)
+            self.assertIsNone(b.slots[1]);self.assertIsNone(b.retained)
+            self.assertEqual(b.active,2);self.assertEqual(foreign.read_text(),'keep')
+            self.assertEqual(b.archived_package(entry).read_bytes(),data)
+            b.close()
     def make(self,root,runner=None):
         return DurableDemo(root,{},runner=runner or (lambda *args:''))
 
