@@ -1,5 +1,7 @@
 # SatHex-422：自主串口服务 gs422
 
+[分段流与32H进度查询](docs/SEGMENTED-PROGRESS-PROFILE.md)已完成项目定义和主板回归，162项测试通过；真实COM3进度查询通过，物理上传仍未完成。
+
 [软件包索引验收](docs/PACKAGE-INDEX-ACCEPTANCE.md)：历史索引、初始F0恢复和重复请求保护已通过主板真实Docker测试，158项单元测试通过；现场catalog及全部硬件配置仍未完成。
 
 优先查看[当前全目标验收清单](docs/CURRENT-ACCEPTANCE.md)：23条遥控与44项遥测逐项区分样例、物理证据和配置缺项。153项板上测试通过不等于所有现场配置完成。

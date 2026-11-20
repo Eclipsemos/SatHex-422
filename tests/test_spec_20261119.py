@@ -252,11 +252,11 @@ class StagingTests(unittest.TestCase):
             self.assertEqual(r.end(True), 0xff)
             r.close()
 
-    def test_no_unsafe_segment_guess_and_profile_mismatch(self):
+    def test_invalid_segment_count_and_profile_mismatch(self):
         with tempfile.TemporaryDirectory() as folder:
             r = self.receiver(folder)
             r.gate(True)
-            self.assertEqual(r.begin(3, 1, 2, 1, 2), 0xff)
+            self.assertEqual(r.begin(3, 1, 2, 1, 0), 0xff)
             r.close()
             with self.assertRaises(ValueError):
                 self.receiver(folder, 'XMODEM')

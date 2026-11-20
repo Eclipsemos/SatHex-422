@@ -4,7 +4,7 @@ Caller must explicitly select the unresolved source-document interpretation.
 Unknown state-query layouts, erase and load are refused, never simulated as
 successful hardware operations. Frames from the RX channel never get replies.
 """
-from .ota_wire import validate_control, reply, version_reply
+from .ota_wire import validate_control, reply, version_reply, progress_reply
 from .space_protocol import Decoder
 
 
@@ -42,6 +42,9 @@ class Reference:
                 continue
             if action == 'version':
                 output.extend(version_reply(self.version))
+                continue
+            if action == 'progress':
+                output.extend(progress_reply(self.staging.snapshot()))
                 continue
             if action == 'gate':
                 self.staging.gate(args['enabled'])

@@ -11,7 +11,7 @@ from . import tmg
 from .space_protocol import Decoder, Message, encode
 from .space_runtime import Controller, Adapter
 from .space_commands import CommandError
-from .ota_wire import validate_control, reply, version_reply
+from .ota_wire import validate_control, reply, version_reply, progress_reply
 
 
 class LegacyActions:
@@ -147,6 +147,8 @@ class Revised:
                 if action == 'version':
                     version = self.software_backend.version() if self.software_backend else self.version
                     responses.extend(version_reply(version))
+                elif action == 'progress':
+                    with self.lock:responses.extend(progress_reply(self.raw))
                 else:
                     try:
                         self.operations.put_nowait(('control', payload, action, parameters))

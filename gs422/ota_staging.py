@@ -55,8 +55,9 @@ class Staging:
                 return 0xff
             if component not in (1, 2, 3, 4) or region not in (1, 2, 3, 4) or mode not in (1, 2):
                 return 2
-            # The document supplies no segment identifier/assembly contract.
-            if segmented or segments:
+            # Project segmented-stream profile: one global packet sequence and
+            # one file CRC across batches; no reset of sequence or metadata.
+            if segmented not in (0,1) or (segmented==0 and segments!=0) or (segmented==1 and not 1<=segments<=255):
                 return 0xff
             request = [component, region, mode, segmented, segments]
             if self.state['status'] == 0x20:
@@ -98,6 +99,8 @@ class Staging:
             else:
                 size, checksum = self.state['size'], self.state['checksum']
             count = expected_packets(size)
+            if self.state['request'][3] and self.state['request'][4]>count:
+                return self._error(status=0x40)
             if seq >= count:
                 return self._error()
             used = min(499, size + 6 - seq * 499)

@@ -92,7 +92,7 @@ class DemoDocker:
             if args['index'] != 0 or staging.state['status'] != 0x23 or not staging.state['request']:
                 return 0xff
             component, region, mode, segmented, segments = staging.state['request']
-            if (component, region) not in ((3, 1), (4, 2)) or region == self.active or segmented:
+            if (component, region) not in ((3, 1), (4, 2)) or region == self.active:
                 return 0xff
             archive = self.root / (uuid.uuid4().hex + '.tar')
             candidate = None

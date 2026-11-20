@@ -30,7 +30,7 @@ from gs422.demo_docker import DemoDocker
 from gs422.durable_demo import DurableDemo
 from gs422.dual_uart import DualUART
 from gs422.ota_staging import Staging
-from gs422.ota_wire import control, file_packets
+from gs422.ota_wire import control, file_packets, segment_ranges
 from gs422.revised_runtime import Revised
 from gs422.space_protocol import Decoder, Message
 from gs422.space_protocol import fragments
@@ -170,16 +170,26 @@ def main():
                 return answer[4],int.from_bytes(answer[5:7],'big')
             assert ota(0x17,b'\x01'+bytes(5))==b'\x31\x17\x00'
             def upload(version, region):
-                assert ota(0x53,bytes([region+2,region,1,0,0,0]))==b'\x31\x53\x00'
+                segmented='--segmented' in sys.argv
+                assert ota(0x53,bytes([region+2,region,1,int(segmented),3 if segmented else 0,0]))==b'\x31\x53\x00'
                 total=0
                 # Bounded paced PTY upload, real filesystem persistence.
-                for frame in file_packets(packages[version],'CCITT-FALSE'):
-                    os.write(um,frame);total+=1
-                    pump_until(lambda: runtime.raw['TMG010']>=total)
-                    assert not select.select([um],[],[],0)[0], 'upload channel transmitted'
+                frames=list(file_packets(packages[version],'CCITT-FALSE'))
+                groups=segment_ranges(len(frames),3) if segmented else [(0,len(frames))]
+                for segment in ([0,2,1] if segmented else [0]):
+                    lo,hi=groups[segment]
+                    for frame in frames[lo:hi]:
+                        os.write(um,frame);total+=1
+                        pump_until(lambda: runtime.raw['TMG010']>=total)
+                        assert not select.select([um],[],[],0)[0], 'upload channel transmitted'
+                    progress=exchange(control(0x32,0x53,bytes(6)))
+                    assert progress[:2]==b'\x33\x53'
+                    _,missing,received,errors,percent,check,state=struct.unpack('>4IBBB',progress[2:])
+                    assert received==total and state==0x20
+                    if segmented and segment==2:assert missing==groups[1][0]
                 assert ota(0x54,bytes(6))==b'\x31\x54\x00'
                 assert telemetry()['TMG012']==100
-                passed('ota_upload_'+version, packets=total, bytes=len(packages[version]))
+                passed('ota_upload_'+version, packets=total, bytes=len(packages[version]),segmented=segmented,progress_query=True)
             upload('v1',1)
             assert ota(4,bytes(6))==b'\x31\x04\x00'
             assert ota(0x56,bytes(6))==b'\x33\x56v1\x00'

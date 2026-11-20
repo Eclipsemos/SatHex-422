@@ -35,9 +35,9 @@ def validate_control(payload):
     kind, code = payload[:2]
     w = payload[2:]
     if kind == 0x32:
-        if code != 0x56 or any(w):
-            raise ValueError('status query body is unspecified; only version query is defined')
-        return 'version', {}
+        if any(w) or code not in (0x53,0x56):
+            raise ValueError('query requires known code and six zero reserved bytes')
+        return ('progress' if code==0x53 else 'version'), {}
     if code == 0x17 and w[0] in (1, 2) and not any(w[1:]):
         return 'gate', {'enabled': w[0] == 1}
     if code == 4 and w[0] == 0 and (w[1] <= 0x80 or w[1] >= 0xf0) and not any(w[2:]):
@@ -68,6 +68,22 @@ def version_reply(version):
     if not data or len(data) > 501 or any(b < 32 or b > 126 for b in data):
         raise ValueError('invalid firmware version')
     return encode(b'\x33\x56' + data + b'\x00')
+
+
+def progress_reply(snapshot):
+    """Project extension: 33 53 + exact raw TMG008..014, all big endian."""
+    values=[snapshot[f'TMG{i:03}'] for i in range(8,15)]
+    if any(type(v) is not int or not 0<=v<(1<<(32 if i<4 else 8)) for i,v in enumerate(values)):
+        raise ValueError('invalid progress fields')
+    if values[4]>100:raise ValueError('invalid percentage')
+    return encode(b'\x33\x53'+struct.pack('>4IBBB',*values))
+
+
+def segment_ranges(total_packets,segments):
+    """Balanced contiguous sequence ranges; end exclusive, sequence never resets."""
+    if type(total_packets) is not int or type(segments) is not int or not 1<=segments<=255 or total_packets<segments:
+        raise ValueError('segments must be nonempty and <=255')
+    return [(i*total_packets//segments,(i+1)*total_packets//segments) for i in range(segments)]
 
 
 def parse_packet(payload):
