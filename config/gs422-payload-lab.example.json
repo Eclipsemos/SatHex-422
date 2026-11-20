@@ -1,0 +1,13 @@
+{
+  "mode": "lab",
+  "control_port": "/dev/ttyS6",
+  "upload_port": "/dev/ttyS8",
+  "state_root": "/var/lib/sathex-payload-lab",
+  "records_root": "/run/sathex-payload-records",
+  "telemetry_file": "/run/sathex-measurements.json",
+  "telemetry_max_age": 2,
+  "allow_fixture_telemetry": false,
+  "catalog": {},
+  "ota_capacity": 8388608,
+  "enable_reboot": false
+}
