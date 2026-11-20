@@ -110,10 +110,11 @@ def ipv4(name):
 
 
 class Serial:
-    def __init__(self, path, baud=9600, parity='N', stop_bits=1):
+    def __init__(self, path, baud=9600, parity='N', stop_bits=1, receive_only=False):
         if baud not in (9600, 19200, 38400, 57600, 115200) or parity not in ('N', 'E', 'O') or stop_bits not in (1, 2):
             raise ValueError('unsupported UART parameters')
-        self.fd = os.open(path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK | os.O_CLOEXEC)
+        access = os.O_RDONLY if receive_only else os.O_RDWR
+        self.fd = os.open(path, access | os.O_NOCTTY | os.O_NONBLOCK | os.O_CLOEXEC)
         self.saved = None
         try:
             fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
