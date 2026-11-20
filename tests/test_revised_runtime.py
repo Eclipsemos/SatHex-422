@@ -55,9 +55,23 @@ class RevisedRuntimeTests(unittest.TestCase):
         self.assertEqual(self.runtime.feed_control(Message(0x21, 1, 0x17, b'\x02' + bytes(5)).wire()), b'')
         self.runtime.legacy.execute_next()
         self.assertEqual(self.runtime.legacy.receive_mode, 2)
+        self.assertTrue(self.storage.state['gate'])
         self.runtime.feed_control(control(0x30, 0x17, b'\x02' + bytes(5)))
         self.assertEqual(self.drain_work(), [b'\x31\x17\x00'])
         self.assertFalse(self.storage.state['gate'])
+
+    def test_k1116_k1117_share_upload_state_and_async_results(self):
+        def send(seq,code,body):
+            self.assertEqual(self.runtime.feed_control(Message(0x21,seq,code,body).wire()),b'')
+            self.runtime.legacy.execute_next()
+            answer=Message.parse(Decoder().feed(self.runtime.feed_control(Message(0x15,500,0).wire()))[0]).body
+            self.assertEqual(answer[4:7],b'\x03\x00\x00')
+        send(1,0x17,b'\x02'+bytes(5))
+        send(2,0x53,bytes([3,1,2,0,0,0]))
+        for frame in file_packets(b'hello','CCITT-FALSE'):
+            self.runtime.feed_upload(frame);self.drain_work()
+        send(3,0x54,bytes(6))
+        self.assertEqual(self.telemetry()['TMG014'],0x23)
 
     def test_bad_frames_counters_no_reply_and_unsupported_flash(self):
         bad = bytearray(control(0x30, 0x56, bytes(6))); bad[-4] ^= 1

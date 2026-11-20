@@ -184,7 +184,11 @@ def main():
             passed('unmapped_algorithm_rejected')
             # Cover every workbook row without substituting mocks for missing hardware.
             from test_spec_20261119 import CASES
-            covered = {'K1101','K1102','K1103','K1104','K1105','K1106','K1107','K1108','K1119'}
+            # Shared K1116/17 execution is tested in live_file_commands.py.
+            assert command(0x55,bytes([2,0,0,0,0,0]))==(5,8)
+            passed('K1118_active_slot_rejected_via_legacy_route')
+            covered = {'K1101','K1102','K1103','K1104','K1105','K1106','K1107','K1108',
+                       'K1116','K1117','K1118','K1119'}
             for key in ('K1101','K1102','K1103','K1119'):
                 kind,code,body,_=CASES[key]
                 assert command(code,body,kind)==(3,0)

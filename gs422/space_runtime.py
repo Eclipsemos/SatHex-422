@@ -83,8 +83,9 @@ class Adapter:
 
 
 class Controller:
-    def __init__(self, sensors, adapter=None, clock=time.monotonic):
+    def __init__(self, sensors, adapter=None, clock=time.monotonic, gate_handler=None):
         self.sensors, self.adapter, self.clock = sensors, adapter or Adapter(), clock
+        self.gate_handler = gate_handler
         self.started = clock()
         self.lock = threading.RLock()
         self.rx = self.executed = self.failures = self.resets = self.dropped = 0
@@ -205,6 +206,8 @@ class Controller:
             self.latest = (message.sequence, message.code, 2, 0)
         try:
             if action == 'receive_gate':
+                if self.gate_handler is not None:
+                    self.gate_handler(parameters['mode'])
                 with self.lock:
                     self.receive_mode = parameters['mode']
                 data = b''

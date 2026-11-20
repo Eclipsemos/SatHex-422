@@ -14,6 +14,25 @@ from .space_commands import CommandError
 from .ota_wire import validate_control, reply, version_reply
 
 
+class LegacyActions:
+    """Keep K/D wire semantics, but share actual OTA executor with TYPE30."""
+    def __init__(self, runtime, delegate):
+        self.runtime, self.delegate = runtime, delegate
+        self.timeout = delegate.timeout
+
+    def execute(self, action, parameters):
+        if action == 'firmware_version':
+            import json
+            version = self.runtime.software_backend.version() if self.runtime.software_backend else self.runtime.version
+            return json.dumps({'version': version}).encode()
+        if action in ('ota_begin', 'ota_end', 'ota_erase'):
+            result = self.runtime.run_ota(action[4:], parameters)
+            if result:
+                raise CommandError({1: 6, 2: 4, 3: 4}.get(result, 8))
+            return b'{}'
+        return self.delegate.execute(action, parameters)
+
+
 class Revised:
     def __init__(self, staging, sensors, raw_telemetry, *, version, adapter=None, clock=time.monotonic,
                  software_backend=None, algorithms_enabled=False):
@@ -27,6 +46,7 @@ class Revised:
         self.raw = dict(raw_telemetry)
         self.started = clock()
         self.lock = threading.RLock()
+        self.ota_lock = threading.RLock()
         self.control_decoder, self.upload_decoder = Decoder(), Decoder()
         self.operations = queue.Queue(128)
         self.replies = queue.Queue(128)
@@ -36,7 +56,8 @@ class Revised:
         self.correct = self.incorrect = self.bus_errors = 0
         self.upload_drops = 0
         self.failure = None
-        self.legacy = Controller(sensors, adapter or Adapter(), clock=clock)
+        self.legacy = Controller(sensors, LegacyActions(self, adapter or Adapter()), clock=clock,
+                                 gate_handler=self.set_legacy_gate)
         self._snapshot()
 
     def _snapshot(self):
@@ -44,6 +65,32 @@ class Revised:
         with self.lock:
             self.raw.update(snapshot)
             self.raw['TMG011'] = (snapshot['TMG011'] + self.upload_drops) & 0xffffffff
+
+    def set_legacy_gate(self, mode):
+        # K1103/02 opens OTA; K1101/01 is ordinary-file mode, not OTA mode.
+        # TYPE30/17 retains its independent 01=open,02=close parameter syntax.
+        with self.ota_lock:
+            self.staging.gate(mode == 2)
+            self._snapshot()
+
+    def run_ota(self, action, parameters):
+        with self.ota_lock:
+            if action == 'gate':
+                self.staging.gate(parameters['enabled'])
+                result = 0
+            elif action == 'begin':
+                if self.software_backend and not self.software_backend.permits(parameters):
+                    result = 2
+                else:
+                    result = self.staging.begin(**parameters)
+            elif action == 'end':
+                result = self.staging.end(**parameters)
+            elif action in ('load', 'erase') and self.software_backend:
+                result = self.software_backend.ota(action, parameters, self.staging)
+            else:
+                result = 0xff
+            self._snapshot()
+            return result
 
     def update_telemetry(self, values):
         # Caller owns measurement freshness, UTC synchronization and missing-data policy.
@@ -136,28 +183,16 @@ class Revised:
             return False
         try:
             if kind == 'data':
-                before = self.staging.state['bus_errors']
-                self.staging.receive(payload)
-                self.bus_errors += (self.staging.state['bus_errors'] - before) & 255
+                with self.ota_lock:
+                    before = self.staging.state['bus_errors']
+                    self.staging.receive(payload)
+                    self.bus_errors += (self.staging.state['bus_errors'] - before) & 255
             elif kind == 'error':
                 self.bus_errors += 1
                 with self.staging.lock:
                     self.staging._error()
             else:
-                if action == 'gate':
-                    self.staging.gate(parameters['enabled'])
-                    result = 0
-                elif action == 'begin':
-                    if self.software_backend and not self.software_backend.permits(parameters):
-                        result = 2
-                    else:
-                        result = self.staging.begin(**parameters)
-                elif action == 'end':
-                    result = self.staging.end(**parameters)
-                elif action in ('load', 'erase') and self.software_backend:
-                    result = self.software_backend.ota(action, parameters, self.staging)
-                else:
-                    result = 0xff  # erase/load require a real partition backend
+                result = self.run_ota(action, parameters)
                 self.replies.put_nowait(reply(payload[1], result))
             self._snapshot()
         finally:
