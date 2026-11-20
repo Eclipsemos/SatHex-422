@@ -1,5 +1,7 @@
 # 非活动软件清理与恢复包验收
 
+后续进展：历史/初始索引已实现并完成主板样例验收，详见PACKAGE-INDEX-ACCEPTANCE.md；下文记录的是此前仅重上传恢复阶段的证据。
+
 2026-11-20，X26主板、真实Docker、控制/上注PTY，运行`tests/live_demo_deployment.py --durable --unified`。软件v1/v2为已明确授权的样例，不涉及Ubuntu更新或物理分区擦除。
 
 ## 本轮实现

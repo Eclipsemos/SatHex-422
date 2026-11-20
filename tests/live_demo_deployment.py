@@ -274,6 +274,28 @@ os._exit(23)
                 # Return to v2 for the remaining assertions below.
                 upload('v2',2)
                 assert ota(4,bytes(6))==b'\x31\x04\x00'
+                v1_digest=next(k for k,v in catalog.items() if v['version']=='v1')
+                history=next(int(k) for k,v in backend.package_index.entries.items() if v==v1_digest and int(k)<=128)
+                backend.package_index.register_initial(0xf0,v1_digest)
+                before=dict(backend.package_index.entries)
+                backend.close();backend=DurableDemo(base/'backend',catalog);rebind_software()
+                assert backend.package_index.entries==before
+                assert ota(4,bytes([0,history,0,0,0,0]))==b'\x31\x04\x00'
+                assert backend.version()=='v1'
+                unchanged=backend.software
+                assert ota(4,bytes([0,history,0,0,0,0]))==b'\x31\x04\x00'
+                assert backend.software==unchanged
+                passed('history_index_restores_v1_after_manager_restart_and_retry_is_idempotent')
+                assert ota(4,bytes([0,0xff,0,0,0,0]))==b'\x31\x04\xff'
+                assert backend.version()=='v1'
+                v2_digest=next(k for k,v in catalog.items() if v['version']=='v2')
+                v2_index=next(int(k) for k,v in backend.package_index.entries.items() if v==v2_digest and int(k)<=128)
+                assert ota(4,bytes([0,v2_index,0,0,0,0]))==b'\x31\x04\x00'
+                assert ota(4,bytes([0,0xf0,0,0,0,0]))==b'\x31\x04\x00'
+                assert backend.version()=='v1'
+                passed('initial_package_F0_recovery_and_unregistered_FF_rejection')
+                assert ota(4,bytes([0,v2_index,0,0,0,0]))==b'\x31\x04\x00'
+                assert backend.version()=='v2'
             assert command(0x83,bytes([2,0,1,2,0,0]))==(5,4)
             passed('unmapped_algorithm_rejected')
             # Cover every workbook row without substituting mocks for missing hardware.

@@ -12,6 +12,7 @@ import tempfile
 import shutil
 from .demo_docker import DemoDocker
 from .space_commands import CommandError
+from .package_index import PackageIndex, ArchivedInput
 
 
 class DurableDemo(DemoDocker):
@@ -26,6 +27,7 @@ class DurableDemo(DemoDocker):
             fcntl.flock(self.owner,fcntl.LOCK_EX|fcntl.LOCK_NB)
             super().__init__(root,catalog,runner)
             self.state_path=root/'state.json'
+            self.package_index=PackageIndex(root,catalog)
             if self.state_path.exists():
                 record=json.loads(self.state_path.read_text())
                 if record.get('schema')!=1:raise ValueError('invalid state schema')
@@ -109,6 +111,20 @@ class DurableDemo(DemoDocker):
         with self.lock:
             if self.task and self._state(self.task)['Running']:
                 return 1
+            if action=='load' and args.get('index',0)!=0:
+                try:
+                    path=self.package_index.resolve(args['index'])
+                except (ValueError,OSError):return 0xff
+                entry=self.catalog[self.package_index.entries[str(args['index'])]]
+                if self.active is not None and self.slots[self.active]==entry and self.software:
+                    state=self._state(self.software)
+                    if state['Running'] and not state.get('Paused'):
+                        if staging is not None:
+                            staging.state['status']=0x31;staging._save()
+                        return 0
+                region=2 if self.active==1 else 1
+                staging=ArchivedInput(path,region,staging)
+                args={'index':0}
             if action=='erase' and args.get('scope')==1:
                 region=args['region']
                 if region not in (1,2) or region==self.active:return 0xff
@@ -138,6 +154,10 @@ class DurableDemo(DemoDocker):
                 # Keep the committed pre-operation snapshot for a fresh process.
                 raise
             self._save('idle')
+            if action=='load' and result==0 and self.active is not None:
+                # Register only a health-confirmed release, not every uploaded tar.
+                digest=self.archived_package(self.slots[self.active]).stem
+                self.package_index.register_history(digest)
             return result
 
     def _cache_candidate(self,staging,region):

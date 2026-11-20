@@ -1,5 +1,7 @@
 # SatHex-422：自主串口服务 gs422
 
+[软件包索引验收](docs/PACKAGE-INDEX-ACCEPTANCE.md)：历史索引、初始F0恢复和重复请求保护已通过主板真实Docker测试，158项单元测试通过；现场catalog及全部硬件配置仍未完成。
+
 优先查看[当前全目标验收清单](docs/CURRENT-ACCEPTANCE.md)：23条遥控与44项遥测逐项区分样例、物理证据和配置缺项。153项板上测试通过不等于所有现场配置完成。
 
 [真实遥测与缺测编码](docs/MEASURED-TELEMETRY-ACCEPTANCE.md)：用户确认后摩温度对象及FF/FFFF无效码；新版74B帧已在真实COM3读回，151项板上测试通过。无效标记正确不代表未安装传感器已完成测量验收。
