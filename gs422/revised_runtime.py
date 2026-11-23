@@ -27,6 +27,7 @@ class LegacyActions:
                 if self.runtime.upload_profile == 'modern' and self.runtime.staging.state['status'] == 0x20:
                     raise CommandError(6)
                 self.runtime.upload_profile = 'legacy'
+                self.runtime._set_erase_status(None)
                 try:
                     result = self.runtime.legacy_upload.receive(parameters)
                 finally:
@@ -57,6 +58,8 @@ class Revised:
         self.upload_profile = 'modern'
         self.algorithms_enabled = algorithms_enabled
         self.raw = dict(raw_telemetry)
+        self.last_broadcast_utc = 0
+        self.erase_status = None
         self.started = clock()
         self.lock = threading.RLock()
         self.ota_lock = threading.RLock()
@@ -79,6 +82,8 @@ class Revised:
                     else self.staging.snapshot())
         with self.lock:
             self.raw.update(snapshot)
+            if self.erase_status is not None:
+                self.raw['TMG014'] = self.erase_status
             self.raw['TMG011'] = (snapshot['TMG011'] + self.upload_drops) & 0xffffffff
 
     def set_legacy_gate(self, mode):
@@ -105,18 +110,35 @@ class Revised:
                     result = self.staging.begin(**parameters)
             elif action == 'end':
                 result = self.staging.end(**parameters)
-            elif action in ('load', 'erase') and self.software_backend:
+            elif action == 'erase' and self.software_backend:
+                self._set_erase_status(0x10)
+                try:
+                    result = self.software_backend.ota(action, parameters, self.staging)
+                except Exception:
+                    self._set_erase_status(0x40)
+                    return 0xff
+                self._set_erase_status(0x11 if result == 0 else 0x40)
+            elif action == 'load' and self.software_backend:
                 result = self.software_backend.ota(action, parameters, self.staging)
             else:
                 result = 0xff
+            if action in ('begin','end','load') and result == 0:
+                self._set_erase_status(None)
             self._snapshot()
             return result
+
+    def _set_erase_status(self, value):
+        with self.lock:
+            self.erase_status = value
+            if value is not None:
+                self.raw['TMG014'] = value
 
     def update_telemetry(self, values):
         # Caller owns measurement freshness, UTC synchronization and missing-data policy.
         tmg.pack(values, algorithms_enabled=self.algorithms_enabled)
         with self.lock:
-            self.raw.update(values)
+            self.raw.update({key: value for key, value in values.items()
+                             if key not in ('TMG004','TMG014')})
         self._snapshot()
 
     def _telemetry(self, seq):
@@ -124,7 +146,8 @@ class Revised:
             if self.telemetry_deadline is not None and self.clock() >= self.telemetry_deadline:
                 return b''  # No defined missing-value encoding: do not publish stale numbers.
             values = dict(self.raw)
-            values.update(TMG001=self.correct & 255, TMG002=self.incorrect & 255,
+            values.update(TMG004=self.last_broadcast_utc,
+                          TMG001=self.correct & 255, TMG002=self.incorrect & 255,
                           TMG003=self.bus_errors & 255,
                           TMG040=int(max(0, self.clock() - self.started)) & 255)
         return Message(0x12, seq, 0, tmg.pack(values, algorithms_enabled=self.algorithms_enabled)).wire()
@@ -135,6 +158,14 @@ class Revised:
     def feed_control(self, data=b''):
         responses = bytearray()
         for payload in self.control_decoder.feed(data):
+            if payload[:1] == b'\xcc':
+                # Proposed broadcast subtype 01. No sequence or acknowledgement.
+                if len(payload) == 6 and payload[1] == 1:
+                    with self.lock:
+                        self.last_broadcast_utc = int.from_bytes(payload[2:], 'big')
+                else:
+                    self.incorrect += 1
+                continue
             if payload[:1] in (b'\x30', b'\x32'):
                 try:
                     action, parameters = validate_control(payload)

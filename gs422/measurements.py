@@ -17,9 +17,9 @@ from . import tmg
 
 class Measurements:
     def __init__(self, config):
-        required={'soc_temp_path','smi','card','voltage','power','utc_verified'}
-        if set(config)!=required or config['utc_verified'] is not True:
-            raise ValueError('explicit configuration and verified UTC clock required')
+        required={'soc_temp_path','smi','card','voltage','power'}
+        if set(config)-{'utc_verified'} != required:
+            raise ValueError('invalid measurement configuration')
         if not isinstance(config['card'],int) or isinstance(config['card'],bool) or config['card']<0:
             raise ValueError('invalid Houmo card index')
         for name in ('soc_temp_path','smi'):
@@ -54,9 +54,6 @@ class Measurements:
                 temperature,_=parse_smi(p.stdout,c['card'])
                 if temperature is not None:values['TMG007']=tmg.raw_value('TMG007',temperature/100)
         except (OSError,ValueError,subprocess.SubprocessError):pass
-        utc=int(time.time())
-        if not 0<utc<0xffffffff:raise ValueError('clock outside UTC field')
-        values['TMG004']=utc
         return {'source':'measured','monotonic':time.monotonic(),'values':values}
 
 

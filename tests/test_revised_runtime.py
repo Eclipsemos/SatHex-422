@@ -1,10 +1,11 @@
 import tempfile
+import threading
 import unittest
 from gs422.core import Cache
 from gs422 import tmg
 from gs422.ota_wire import control, file_packets
 from gs422.ota_staging import Staging
-from gs422.space_protocol import Decoder, Message
+from gs422.space_protocol import Decoder, Message, encode
 from gs422.revised_runtime import Revised
 
 
@@ -81,6 +82,52 @@ class RevisedRuntimeTests(unittest.TestCase):
         self.runtime.feed_control(control(0x30, 0x55, b'\x01' + bytes(5)))
         self.assertEqual(self.drain_work(), [b'\x31\x55\xff'])
         self.assertNotIn(self.telemetry()['TMG014'], (0x11, 0x31))
+
+    def test_time_is_last_valid_broadcast_in_receive_order(self):
+        self.assertEqual(self.telemetry()['TMG004'], 0)
+        def broadcast(seconds):
+            return encode(b'\xcc\x01' + seconds.to_bytes(4, 'big'))
+        for stamp in (987654, 123456):
+            frame = broadcast(stamp)
+            self.assertEqual(self.runtime.feed_control(frame[:7]), b'')
+            self.assertEqual(self.runtime.feed_control(frame[7:]), b'')
+            self.now[0] += 20
+            self.runtime.update_telemetry(self.values)
+            self.assertEqual(self.telemetry()['TMG004'], stamp)
+        damaged = bytearray(broadcast(7))
+        damaged[-4] ^= 1
+        for invalid in (damaged, encode(b'\xcc\x01'), encode(b'\xcc\x02'+bytes(4))):
+            self.runtime.feed_control(invalid)
+            self.assertEqual(self.telemetry()['TMG004'], 123456)
+        self.runtime.feed_upload(broadcast(9))
+        self.assertEqual(self.telemetry()['TMG004'], 123456)
+
+    def test_erase_status_visible_through_both_routes(self):
+        for kind, result, final in ((0x21, 0, 0x11), (0x30, 0, 0x11), (0x30, 255, 0x40)):
+            entered, release = threading.Event(), threading.Event()
+            class Backend:
+                def ota(self, action, args, staging):
+                    entered.set()
+                    if not release.wait(2):
+                        raise RuntimeError('test timed out')
+                    return result
+            self.runtime.software_backend = Backend()
+            body = bytes([1,1,0,0,0,0])
+            frame = Message(kind, 1, 0x55, body).wire() if kind == 0x21 else control(kind,0x55,body)
+            self.runtime.feed_control(frame)
+            worker = threading.Thread(target=(self.runtime.legacy if kind == 0x21 else self.runtime).execute_next)
+            worker.start()
+            try:
+                self.assertTrue(entered.wait(1))
+                self.runtime.update_telemetry(self.values)
+                self.assertEqual(self.telemetry()['TMG014'], 0x10)
+                progress = Decoder().feed(self.runtime.feed_control(control(0x32,0x53,bytes(6))))[0]
+                self.assertEqual(progress[-1], 0x10)
+            finally:
+                release.set()
+                worker.join(2)
+            self.runtime.update_telemetry(self.values)
+            self.assertEqual(self.telemetry()['TMG014'], final)
 
     def test_missing_fields_and_wrong_crc_rejected(self):
         with self.assertRaises(ValueError):

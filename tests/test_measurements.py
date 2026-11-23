@@ -45,7 +45,7 @@ class MeasurementsTests(unittest.TestCase):
     def test_unverified_clock_scale_and_invalid_measurement_refused(self):
         with tempfile.TemporaryDirectory() as root:
             c=self.config(root);c['utc_verified']=False
-            with self.assertRaises(ValueError):Measurements(c)
+            self.assertNotIn('TMG004',Measurements(c).sample()['values'])
             c['utc_verified']=True;c['voltage']={'path':str(Path(root)/'v'),'divisor':1000,'verified':False}
             with self.assertRaises(ValueError):Measurements(c)
             c['voltage']=None;(Path(root)/'soc').write_text('nan')

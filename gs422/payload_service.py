@@ -26,7 +26,7 @@ from .dual_uart import DualUART
 from .board_reboot import BoardReboot
 
 LOG=logging.getLogger('gs422.payload')
-MEASURED=frozenset(('TMG004','TMG005','TMG006','TMG007','TMG034'))
+MEASURED=frozenset(('TMG005','TMG006','TMG007','TMG034'))
 
 
 def load_config(path):
@@ -61,13 +61,13 @@ def measurement_snapshot(path, max_age, allow_fixture, clock=time.monotonic):
     p=Path(path)
     if p.stat().st_size>8192:raise ValueError('snapshot too large')
     d=json.loads(p.read_text())
-    if set(d)!={'source','monotonic','values'} or set(d['values'])!=MEASURED:raise ValueError('incomplete measured snapshot')
+    if set(d)!={'source','monotonic','values'} or set(d['values'])-{'TMG004'}!=MEASURED:raise ValueError('incomplete measured snapshot')
     if d['source'] not in ('measured','fixture') or d['source']=='fixture' and not allow_fixture:
         raise ValueError('fixture measurements not authorized')
     stamp=d['monotonic']
     if type(stamp) not in (int,float) or not math.isfinite(stamp) or not 0<=clock()-stamp<max_age:
         raise ValueError('snapshot expired or timestamp invalid')
-    values={f.id:0 for f in tmg.FIELDS};values.update(d['values'])
+    values={f.id:0 for f in tmg.FIELDS};values.update({k:d['values'][k] for k in MEASURED})
     tmg.pack(values)
     return values,stamp+max_age
 
