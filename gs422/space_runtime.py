@@ -1,5 +1,6 @@
 """Bounded execution and observable command state for the experimental protocol."""
 from collections import OrderedDict, deque
+from concurrent.futures import Future
 import json
 import os
 import queue
@@ -124,7 +125,7 @@ class Controller:
             if isinstance(message, ShortCommand):
                 result = json.loads(data) if data else {}
                 keys = ('link', 'count', 'file_type', 'deleted_files', 'state', 'frames', 'bytes',
-                        'crc_errors', 'play_state', 'play_frames')
+                        'crc_errors', 'play_state', 'play_frames', 'task_id', 'file_id', 'value', 'app_exit')
                 detail = {k: result[k] for k in keys if k in result and isinstance(result[k], (int,type(None)))}
                 detail.update(device=1 if message.code == 0x13 else 2, words=message.body[:6].hex(),
                               receipt=message.sequence, exit=error)
@@ -245,7 +246,13 @@ class Controller:
                 if action == 'ota_upload' and self.receive_mode != 2:
                     raise CommandError(4)
                 data = self.adapter.execute(action, parameters)
-            self._result(message, 3, data=data)
+            if isinstance(data, Future):
+                def finished(future):
+                    error, detail = future.result()
+                    self._result(message, 5 if error else 3, error, json.dumps(detail).encode())
+                data.add_done_callback(finished)
+            else:
+                self._result(message, 3, data=data)
         except CommandError as error:
             self._result(message, 5, error.error)
         except Exception:

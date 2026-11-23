@@ -56,8 +56,10 @@ def load_config(path):
         if not Path(c.get('ssd_root') or '').is_absolute() or not re.fullmatch(r'[a-zA-Z0-9-]+', c.get('ssd_uuid') or ''):
             raise ValueError('SSD requires an absolute mount and filesystem UUID')
     for key, entry in c.get('algorithms', {'1':{'cpu_image':'active'}}).items():
-        if key not in {str(i) for i in range(16)} or set(entry)-{'cpu_image','device','npu_image'}:
+        if key not in {str(i) for i in range(16)} or set(entry)-{'cpu_image','device','npu_image','ht226_image'}:
             raise ValueError('invalid algorithm registration')
+        if 'ht226_image' in entry and not re.fullmatch('sha256:[0-9a-f]{64}',entry['ht226_image']):
+            raise ValueError('HT226 requires a pinned algorithm image ID')
         if entry.get('cpu_image')!='active' and not re.fullmatch('sha256:[0-9a-f]{64}',entry.get('cpu_image','')):
             raise ValueError('algorithm requires immutable CPU image')
         if 'npu_image' in entry or 'device' in entry:
@@ -119,7 +121,7 @@ def serve(c):
         else:
             files=FileServices(c['records_root'],published=published,ssd_root=c.get('ssd_root'),ssd_uuid=c.get('ssd_uuid'))  # unbound hardware stays unavailable
         reboot=BoardReboot(root/'reboot.json',enabled=True) if c['enable_reboot'] else None
-        scheduler=Scheduler(software,c.get('algorithms',{'1':{'cpu_image':'active'}}))
+        scheduler=Scheduler(software,c.get('algorithms',{'1':{'cpu_image':'active'}}),files)
         backend=PayloadBackend(software,files,reboot=reboot,scheduler=scheduler)
         staging=Staging(root/'ota-v101',crc_profile='XMODEM',capacity=c['ota_capacity'])
         from .ota_wire import V101_CRC
@@ -132,8 +134,9 @@ def serve(c):
             previous=None
             while not stop.is_set():
                 try:
+                    activity=backend.telemetry()
                     raw,expires=measurement_snapshot(c['telemetry_file'],c['telemetry_max_age'],c['allow_fixture_telemetry'])
-                    raw.update(backend.telemetry())
+                    raw.update(activity)
                     runtime.update_telemetry(raw)
                     runtime.set_telemetry_deadline(expires)
                     valid=True

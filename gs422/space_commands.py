@@ -18,12 +18,15 @@ def require(condition):
         raise CommandError(4)
 
 
-SHORT_CODES = frozenset((0x13, 0x40, 0x41, 0x42, 0x43, 0x51, 0x52))
+SHORT_CODES = frozenset((0x13, 0x40, 0x41, 0x42, 0x43, 0x51, 0x52, 0x83))
 REPLAY_TYPES = (0x11, 0x12, 0x13, 0x14, 0x20, 0x21, 0x22)
 
 
 def validate_short(code, words):
     require(len(words) == 6)
+    if code == 0x83:
+        require(words[0] <= 15)
+        return 'short_algorithm', {'task_id': words[0], 'words': tuple(words[1:])}
     if code == 0x40:
         require(words[0] in (0, 1) and not any(words[1:]))
         return 'short_link', {'link': words[0]}

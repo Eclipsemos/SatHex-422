@@ -41,6 +41,10 @@ class PayloadBackend:
         with self.lock:
             if action in self.FILE_ACTIONS:
                 return self.files.execute(action,parameters)
+            if action == 'short_algorithm':
+                if self.scheduler is None:
+                    raise CommandError(7)
+                return self.scheduler.start_short(**parameters)
             if action in self.SOFTWARE_ACTIONS:
                 if self.scheduler and action != 'firmware_version':
                     return self.scheduler.execute(action,parameters)
