@@ -9,10 +9,17 @@ MAX_PAYLOAD = 504
 HEADER = struct.Struct('>BBHB')
 
 
-def encode(payload):
+def wire_sum(payload, ota101):
+    total = sum(payload)
+    if ota101 and payload[:1] in (b'\x30', b'\x31', b'\x32', b'\x33', b'\x3a'):
+        total += sum(len(payload).to_bytes(2, 'big'))
+    return total & 0xffff
+
+
+def encode(payload, *, ota101=False):
     if len(payload) > MAX_PAYLOAD:
         raise ValueError('payload exceeds 504 bytes')
-    return HEAD + struct.pack('>H', len(payload)) + payload + struct.pack('>H', sum(payload) & 0xffff) + TAIL
+    return HEAD + struct.pack('>H', len(payload)) + payload + struct.pack('>H', wire_sum(payload, ota101)) + TAIL
 
 
 @dataclass(frozen=True)
@@ -39,7 +46,8 @@ class Message:
 
 class Decoder:
     """Bounded stream parser. Length owns framing; marker bytes may be data."""
-    def __init__(self, timeout=1.0, clock=time.monotonic):
+    def __init__(self, timeout=1.0, clock=time.monotonic, *, ota101=False):
+        self.ota101 = ota101
         self.buffer = bytearray()
         self.started = None
         self.timeout, self.clock = timeout, clock
@@ -93,7 +101,7 @@ class Decoder:
                 if self.buffer[size - 2:size] != TAIL:
                     self.format_errors += 1
                     del self.buffer[:1]
-                elif sum(body) & 0xffff != checksum:
+                elif wire_sum(body, self.ota101) != checksum:
                     self.checksum_errors += 1
                     del self.buffer[:1]
                 else:

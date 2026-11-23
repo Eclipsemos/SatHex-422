@@ -24,12 +24,12 @@ class LegacyActions:
         if action == 'ota_upload' and self.runtime.legacy_upload is not None:
             import json
             with self.runtime.ota_lock:
-                if self.runtime.upload_profile == 'modern' and self.runtime.staging.state['status'] == 0x20:
+                if self.runtime.upload_profile == 'modern' and self.runtime.staging.state['status'] in (0x20, 0x21):
                     raise CommandError(6)
-                self.runtime.upload_profile = 'legacy'
                 self.runtime._set_erase_status(None)
                 try:
                     result = self.runtime.legacy_upload.receive(parameters)
+                    self.runtime._select_upload('legacy')
                 finally:
                     self.runtime._snapshot()
                 return json.dumps(result).encode()
@@ -46,24 +46,28 @@ class LegacyActions:
 
 
 class Revised:
+    staging_fields = frozenset(f'TMG{i:03}' for i in range(8, 15))
+
     def __init__(self, staging, sensors, raw_telemetry, *, version, adapter=None, clock=time.monotonic,
-                 software_backend=None, algorithms_enabled=False, legacy_upload=None):
-        if staging.profile != 'CCITT-FALSE':
-            raise ValueError('agreed profile requires CRC-16/CCITT-FALSE')
+                 software_backend=None, algorithms_enabled=False, legacy_upload=None, ota101=False):
+        self.ota101 = ota101
+        if staging.profile != ('XMODEM' if ota101 else 'CCITT-FALSE'):
+            raise ValueError('file CRC profile does not match selected wire revision')
         tmg.pack(raw_telemetry, algorithms_enabled=algorithms_enabled)
         version_reply(version)
         self.staging, self.version, self.clock = staging, version, clock
         self.software_backend = software_backend
         self.legacy_upload = legacy_upload
-        self.upload_profile = 'modern'
+        self.upload_profile = staging.state.get('upload_profile', 'modern')
         self.algorithms_enabled = algorithms_enabled
         self.raw = dict(raw_telemetry)
         self.last_broadcast_utc = 0
-        self.erase_status = None
+        self.erase_status = (0 if self.upload_profile == 'legacy' and legacy_upload is not None
+                            and staging.state.get('loaded_legacy') == legacy_upload.state['file_id'] else None)
         self.started = clock()
         self.lock = threading.RLock()
         self.ota_lock = threading.RLock()
-        self.control_decoder, self.upload_decoder = Decoder(), Decoder()
+        self.control_decoder, self.upload_decoder = Decoder(ota101=ota101), Decoder(ota101=ota101)
         self.operations = queue.Queue(128)
         self.replies = queue.Queue(128)
         self.stop = threading.Event()
@@ -76,6 +80,13 @@ class Revised:
         self.legacy = Controller(sensors, LegacyActions(self, adapter or Adapter()), clock=clock,
                                  gate_handler=self.set_legacy_gate)
         self._snapshot()
+
+    def _select_upload(self, profile):
+        if self.upload_profile != profile:
+            with self.staging.lock:
+                self.staging.state['upload_profile'] = profile
+                self.staging._save()
+                self.upload_profile = profile
 
     def _snapshot(self):
         snapshot = (self.legacy_upload.snapshot() if self.upload_profile == 'legacy' and self.legacy_upload is not None
@@ -93,9 +104,21 @@ class Revised:
             self.staging.gate(mode == 2)
             if mode == 0 and self.legacy_upload is not None:
                 self.legacy_upload.reset()
+                self._select_upload('modern')
             self._snapshot()
 
     def run_ota(self, action, parameters):
+        try:
+            return self._run_ota(action, parameters)
+        except CommandError:
+            self._set_erase_status(0x40)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception('Unexpected OTA execution error')
+            self._set_erase_status(0xff)
+        return 0xff
+
+    def _run_ota(self, action, parameters):
         with self.ota_lock:
             if action == 'gate':
                 self.staging.gate(parameters['enabled'])
@@ -106,23 +129,34 @@ class Revised:
                 elif self.software_backend and not self.software_backend.permits(parameters):
                     result = 2
                 else:
-                    self.upload_profile = 'modern'
                     result = self.staging.begin(**parameters)
+                    if result == 0:
+                        self._select_upload('modern')
             elif action == 'end':
-                result = self.staging.end(**parameters)
+                result = self.staging.end(**parameters, publish=self._set_erase_status)
             elif action == 'erase' and self.software_backend:
                 self._set_erase_status(0x10)
-                try:
-                    result = self.software_backend.ota(action, parameters, self.staging)
-                except Exception:
-                    self._set_erase_status(0x40)
-                    return 0xff
+                result = self.software_backend.ota(action, parameters, self.staging)
                 self._set_erase_status(0x11 if result == 0 else 0x40)
             elif action == 'load' and self.software_backend:
+                previous = self.raw['TMG014']
+                self._set_erase_status(0x30)
+                if self.upload_profile == 'legacy' and parameters['index'] == 0:
+                    activate = getattr(self.software_backend, 'activate_legacy', None)
+                    result = activate(self.legacy_upload) if activate else 0xff
+                    if result == 0:
+                        with self.staging.lock:
+                            self.staging.state['loaded_legacy'] = self.legacy_upload.state['file_id']
+                            self.staging._save()
+                    self._set_erase_status(0x31 if result == 0 else previous if result == 1 else 0x40)
+                    self._snapshot()
+                    return result
                 result = self.software_backend.ota(action, parameters, self.staging)
+                if result:
+                    self._set_erase_status(previous if result == 1 else 0x40)
             else:
                 result = 0xff
-            if action in ('begin','end','load') and result == 0:
+            if (action in ('begin','end','load') and result == 0) or (action == 'end' and self.staging.state['status'] == 0x24):
                 self._set_erase_status(None)
             self._snapshot()
             return result
@@ -132,13 +166,15 @@ class Revised:
             self.erase_status = value
             if value is not None:
                 self.raw['TMG014'] = value
+                if value == 0x22:
+                    self.raw['TMG013'] = 1
 
     def update_telemetry(self, values):
         # Caller owns measurement freshness, UTC synchronization and missing-data policy.
         tmg.pack(values, algorithms_enabled=self.algorithms_enabled)
         with self.lock:
             self.raw.update({key: value for key, value in values.items()
-                             if key not in ('TMG004','TMG014')})
+                             if key != 'TMG004' and key not in self.staging_fields})
         self._snapshot()
 
     def _telemetry(self, seq):
@@ -167,24 +203,29 @@ class Revised:
                     self.incorrect += 1
                 continue
             if payload[:1] in (b'\x30', b'\x32'):
+                if self.ota101 and payload == bytes((0x32, 0x14)):
+                    self.correct += 1
+                    with self.lock:
+                        responses.extend(encode(bytes((0x33,self.raw['TMG014'])), ota101=True))
+                    continue
                 try:
                     action, parameters = validate_control(payload)
                 except ValueError:
                     self.incorrect += 1
                     if len(payload) >= 2:
-                        responses.extend(reply(payload[1], 0xff))
+                        responses.extend(reply(payload[1], 0xff, ota101=self.ota101))
                     continue
                 self.correct += 1
                 if action == 'version':
                     version = self.software_backend.version() if self.software_backend else self.version
-                    responses.extend(version_reply(version))
+                    responses.extend(version_reply(version, ota101=self.ota101))
                 elif action == 'progress':
-                    with self.lock:responses.extend(progress_reply(self.raw))
+                    with self.lock:responses.extend(progress_reply(self.raw, ota101=self.ota101))
                 else:
                     try:
                         self.operations.put_nowait(('control', payload, action, parameters))
                     except queue.Full:
-                        responses.extend(reply(payload[1], 1))
+                        responses.extend(reply(payload[1], 1, ota101=self.ota101))
                 continue
             try:
                 message = Message.parse(payload)
@@ -251,7 +292,7 @@ class Revised:
                     self.staging._error()
             else:
                 result = self.run_ota(action, parameters)
-                self.replies.put_nowait(reply(payload[1], result))
+                self.replies.put_nowait(reply(payload[1], result, ota101=self.ota101))
             self._snapshot()
         finally:
             self.operations.task_done()

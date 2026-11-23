@@ -52,7 +52,7 @@ def main():
                 except subprocess.TimeoutExpired:process.kill();process.wait();raise
             if log:log.close();log=None
         def request(frame,expect=True):
-            os.write(cm,frame);d=Decoder();deadline=time.monotonic()+(3 if expect else .3)
+            os.write(cm,frame);d=Decoder(ota101=True);deadline=time.monotonic()+(3 if expect else .3)
             while time.monotonic()<deadline:
                 if select.select([cm],[],[],.05)[0]:
                     frames=d.feed(os.read(cm,4096))
@@ -65,20 +65,20 @@ def main():
             check=subprocess.run(service_command+['--config',str(cfg),'--check-config'],cwd=ROOT,capture_output=True)
             assert check.returncode==0,check.stderr
             start();assert tm()['TMG006']==40
-            assert request(control(0x30,0x17,b'\x01'+bytes(5)))==b'\x31\x17\x00'
-            assert request(control(0x30,0x53,bytes([3,1,2,0,0,0])))==b'\x31\x53\x00'
-            packets=list(file_packets(b'x'*700,'CCITT-FALSE'))
+            assert request(control(0x30,0x17,b'\x01'+bytes(5),ota101=True))==b'\x31\x17\x00'+bytes(5)
+            assert request(control(0x30,0x53,bytes([3,1,2,0,0,0]),ota101=True))==b'\x31\x53\x00'+bytes(5)
+            packets=list(file_packets(b'x'*700,'XMODEM',ota101=True))
             os.write(um,packets[0]);time.sleep(.1);assert tm()['TMG010']==1
             stop();assert process.returncode==0
             start();assert tm()['TMG010']==1
             os.write(um,packets[1]);time.sleep(.1)
-            assert request(control(0x30,0x54,bytes(6)))==b'\x31\x54\x00'
+            assert request(control(0x30,0x54,bytes(6),ota101=True))==b'\x31\x54\x00'+bytes(5)
             assert tm()['TMG014']==0x23
             assert not select.select([um],[],[],.05)[0]
             print('PASS configured daemon stop/start and persisted upload resume',flush=True)
             paused.set();time.sleep(.9)
             request(Message(0x11,2,0).wire(),False)
-            assert request(control(0x30,0x56,bytes(6)))==b'\x33\x56UNCONFIGURED\x00'
+            assert request(control(0x30,0x56,bytes(6),ota101=True))==b'\x33\x56UNCONFIGURED\x00'
             print('PASS expired measurements suppress telemetry while controls work',flush=True)
             paused.clear();time.sleep(.4);assert tm()['TMG006']==40
             print('PASS fresh measurements restore telemetry; no fake missing zeros',flush=True)

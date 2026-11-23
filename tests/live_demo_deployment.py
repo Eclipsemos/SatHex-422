@@ -185,7 +185,7 @@ def main():
                     progress=exchange(control(0x32,0x53,bytes(6)))
                     assert progress[:2]==b'\x33\x53'
                     _,missing,received,errors,percent,check,state=struct.unpack('>4IBBB',progress[2:])
-                    assert received==total and state==0x20
+                    assert received==total and state==(0x21 if total==len(frames) else 0x20)
                     if segmented and segment==2:assert missing==groups[1][0]
                 assert ota(0x54,bytes(6))==b'\x31\x54\x00'
                 assert telemetry()['TMG012']==100

@@ -111,6 +111,13 @@ class DurableDemo(DemoDocker):
         with self.lock:
             if self.task and self._state(self.task)['Running']:
                 return 1
+            if (action == 'load' and args.get('index') == 0 and staging is not None
+                    and staging.state.get('status') in (0, 0x31) and self.active is not None
+                    and staging.state.get('loaded_image') == self.slots[self.active]['image_id']
+                    and staging.state.get('loaded_file') == staging.state.get('file_id') and self.software):
+                state = self._state(self.software)
+                if state['Running'] and not state.get('Paused'):
+                    return 0
             if action=='load' and args.get('index',0)!=0:
                 try:
                     path=self.package_index.resolve(args['index'])
@@ -158,6 +165,9 @@ class DurableDemo(DemoDocker):
                 # Register only a health-confirmed release, not every uploaded tar.
                 digest=self.archived_package(self.slots[self.active]).stem
                 self.package_index.register_history(digest)
+                if 'file_id' in staging.state:
+                    staging.state.update(loaded_file=staging.state['file_id'], loaded_image=self.slots[self.active]['image_id'])
+                    staging._save()
             return result
 
     def _cache_candidate(self,staging,region):
@@ -194,6 +204,24 @@ class DurableDemo(DemoDocker):
             try:os.fsync(fd)
             finally:os.close(fd)
         finally:temp.unlink(missing_ok=True)
+
+    def activate_legacy(self, upload):
+        """D0351 supplies bytes only. 04H/00 explicitly activates the verified package."""
+        with self.lock, upload.lock:
+            if upload.state['status'] != 0x23:
+                return 0xff
+            with tempfile.TemporaryDirectory(dir=self.root) as temp:
+                archive = Path(temp) / 'legacy.tar'
+                upload.export_verified(archive)
+                entry = self.catalog.get(self._digest(archive))
+                if entry is None:
+                    return 0xff
+                if self.active and self.slots[self.active] == entry and self.software:
+                    state = self._state(self.software)
+                    if state['Running'] and not state.get('Paused'):
+                        return 0
+                region = 2 if self.active == 1 else 1
+                return self.ota('load', {'index': 0}, ArchivedInput(archive, region, None))
 
     @staticmethod
     def _digest(path):

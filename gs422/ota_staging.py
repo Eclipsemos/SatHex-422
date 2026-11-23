@@ -25,6 +25,7 @@ class Staging:
         self.db.execute('CREATE TABLE IF NOT EXISTS meta (id INTEGER PRIMARY KEY CHECK(id=1), body TEXT NOT NULL)')
         self.db.execute('CREATE TABLE IF NOT EXISTS packets (seq INTEGER PRIMARY KEY, data BLOB NOT NULL)')
         self.lock = threading.RLock()
+        self.crc_config_valid = True
         self.profile, self.capacity = crc_profile, capacity
         row = self.db.execute('SELECT body FROM meta WHERE id=1').fetchone()
         self.state = json.loads(row[0]) if row else dict(gate=False, status=0, check=0, errors=0, bus_errors=0,
@@ -33,6 +34,8 @@ class Staging:
         if self.state['crc_profile'] != crc_profile or self.state['capacity'] != capacity:
             self.db.close()
             raise ValueError('persisted upload profile/capacity mismatch')
+        if crc_profile == 'XMODEM' and self.state['status'] == 0x31:
+            self.state.update(status=0, check=0)
         if self.state['status'] == 0x22:
             self.state.update(status=0x20, check=0)  # interrupted CRC can be retried by Z54
         self._save()
@@ -60,7 +63,7 @@ class Staging:
             if segmented not in (0,1) or (segmented==0 and segments!=0) or (segmented==1 and not 1<=segments<=255):
                 return 0xff
             request = [component, region, mode, segmented, segments]
-            if self.state['status'] == 0x20:
+            if self.state['status'] in (0x20, 0x21):
                 return 0 if request == self.state['request'] else 1
             if self.state['file_id'] == 0xffffffff:
                 return 0xff
@@ -82,7 +85,7 @@ class Staging:
     def receive(self, payload):
         """Return local acceptance only. Caller MUST NOT transmit on RX channel."""
         with self.lock:
-            if not self.state['gate'] or self.state['status'] != 0x20:
+            if not self.state['gate'] or self.state['status'] not in (0x20, 0x21):
                 return False
             try:
                 seq, data = parse_packet(payload)
@@ -118,6 +121,8 @@ class Staging:
                 self.state.update(size=size, checksum=checksum, check=2)
                 while self.db.execute('SELECT 1 FROM packets WHERE seq=?', (self.state['next_missing'],)).fetchone():
                     self.state['next_missing'] += 1
+                if self.profile != 'XMODEM' and self.state['next_missing'] == count:
+                    self.state['status'] = 0x21
                 if gap:
                     self.state['bus_errors'] = (self.state['bus_errors'] + 1) & 255
                 self._save()
@@ -140,20 +145,32 @@ class Staging:
                         TMG010=count, TMG011=self.state['errors'], TMG012=(100 * count // total if total else 0),
                         TMG013=self.state['check'], TMG014=self.state['status'])
 
-    def end(self, aborted=False):
+    def end(self, aborted=False, publish=None):
         with self.lock:
             if aborted:
                 self.state.update(status=0x40, gate=False)
                 self._save()
                 return 0xff
+            if not self.crc_config_valid:
+                self.state.update(status=0x24, check=5)
+                self._save()
+                return 0x11
+            if self.state['status'] == 0x24:
+                return 0x11
             if self.state['status'] == 0x23:
                 return 0
-            if self.state['status'] != 0x20 or self.state['size'] is None:
+            if self.state['status'] not in (0x20, 0x21) or self.state['size'] is None:
                 return 0xff
             if self._missing() != expected_packets(self.state['size']):
                 return 1
+            self.state.update(status=0x21)
+            self._save()
+            if publish:
+                publish(0x21)
             self.state.update(status=0x22, check=1)
             self._save()
+            if publish:
+                publish(0x22)
             # Stream rather than hold the advertised (up to 4 GiB) file in RAM.
             import binascii
             value = 0xffff if self.profile in ('CCITT-FALSE', 'MODBUS') else 0
@@ -177,7 +194,7 @@ class Staging:
     def export_verified(self, destination):
         """Export to an explicit caller-owned new file, never overwrite a partition."""
         with self.lock:
-            if self.state['status'] != 0x23:
+            if self.state['status'] != 0x23 or not self.crc_config_valid:
                 raise ValueError('upload is not verified')
             with open(destination, 'xb') as output:
                 remaining = self.state['size']

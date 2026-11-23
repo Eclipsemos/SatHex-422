@@ -53,14 +53,20 @@ class DemoDocker:
     def permits(self, args):
         return (args['component'], args['region']) in ((3, 1), (4, 2)) and args['region'] != self.active
 
-    def _create(self, image, mode):
+    def _create(self, image, mode, *, device=None):
         name = self.prefix + '-' + uuid.uuid4().hex[:8]
         cid = self.runner('create', '--name', name, '--label', 'sathex.demo=' + self.prefix,
                           '--network', 'none', '--read-only', '--cap-drop', 'ALL',
                           '--security-opt', 'no-new-privileges', '--memory', '64m', '--pids-limit', '16',
-                          '--user', '65534:65534', '--entrypoint', '/sample', image, mode)
+                          '--user', '65534:65534', *(['--device',device] if device else []),
+                          '--entrypoint', '/sample', image, mode)
         self.owned.append(cid)
-        self.runner('start', cid)
+        try:
+            self.runner('start', cid)
+        except Exception:
+            self.runner('rm', '-f', cid)
+            self.owned.remove(cid)
+            raise
         return cid
 
     def _state(self, cid):

@@ -11,13 +11,15 @@ import sqlite3
 import threading
 import time
 import zlib
+import uuid
+import stat
 from .space_commands import CommandError
 
 
 class FileServices:
     timeout = 5
 
-    def __init__(self, root, *, sources=None, sinks=None, capture_driver=None, ssd_root=None,
+    def __init__(self, root, *, sources=None, sinks=None, capture_driver=None, ssd_root=None, ssd_uuid=None,
                  delegate=None, max_bytes=64*1024*1024):
         self.root = Path(root).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
@@ -29,6 +31,9 @@ class FileServices:
         self.lock = threading.RLock()
         self.sources, self.sinks = sources or {}, sinks or {}
         self.capture_driver, self.ssd_root, self.delegate = capture_driver, ssd_root, delegate
+        self.ssd_uuid = ssd_uuid
+        self.capture_params = self.ssd_store = None
+        self.db.execute("CREATE TABLE IF NOT EXISTS ssd_files(file INTEGER PRIMARY KEY, token TEXT UNIQUE NOT NULL)")
         self.max_bytes = max_bytes
         self.link = self.selection = None
         self.capture = None
@@ -52,10 +57,57 @@ class FileServices:
         except (OSError,ValueError,IndexError):
             return False
 
+    def _ssd(self):
+        if not self.ssd_root or not self.ssd_uuid:
+            raise CommandError(7)
+        mount = Path(self.ssd_root)
+        device = Path('/dev/disk/by-uuid') / self.ssd_uuid
+        if not mount.is_mount() or not device.exists():
+            raise CommandError(7)
+        disk = device.stat()
+        if not stat.S_ISBLK(disk.st_mode) or disk.st_rdev != mount.stat().st_dev:
+            raise CommandError(7)
+        if self.ssd_store is None:
+            self.ssd_store = sqlite3.connect(mount/'sathex-records.sqlite3', check_same_thread=False)
+            self.ssd_store.execute('PRAGMA synchronous=FULL')
+            self.ssd_store.execute('CREATE TABLE IF NOT EXISTS clips(token TEXT PRIMARY KEY, mode INTEGER, complete INTEGER)')
+            self.ssd_store.execute('CREATE TABLE IF NOT EXISTS clip_ids(id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT UNIQUE)')
+            self.ssd_store.execute('CREATE TABLE IF NOT EXISTS records(token TEXT, idx INTEGER, utc INTEGER, body BLOB, PRIMARY KEY(token,idx))')
+            # Restore the lookup index after the RAM disk is recreated.
+            rows = self.ssd_store.execute('SELECT id,token,complete FROM clip_ids JOIN clips USING(token)')
+            with self.db:
+                for number, token, complete in rows:
+                    fid = 0x80000000 + number
+                    self.db.execute('INSERT OR REPLACE INTO files VALUES(?,1,?)', (fid,complete))
+                    self.db.execute('INSERT OR REPLACE INTO ssd_files VALUES(?,?)', (fid,token))
+        return self.ssd_store
+
+    def _new_ssd(self, db, mode):
+        token = uuid.uuid4().hex
+        with db:
+            number = db.execute('INSERT INTO clip_ids(token) VALUES(?)', (token,)).lastrowid
+            if number > 0x7fffffff:
+                raise CommandError(8)
+            db.execute('INSERT INTO clips VALUES(?,?,0)', (token,mode))
+        fid = 0x80000000 + number
+        with self.db:
+            self.db.execute('INSERT INTO files VALUES(?,1,0)', (fid,))
+            self.db.execute('INSERT INTO ssd_files VALUES(?,?)', (fid,token))
+        return fid
+
     def _new(self, file_type):
-        cursor = self.db.execute('INSERT INTO files(type,complete) VALUES(?,0)',(file_type,))
-        self.db.commit()
-        return cursor.lastrowid
+        # Keep RAM IDs monotonically increasing across cleanup and reserve bit 31 for SSD IDs.
+        self.db.execute('CREATE TABLE IF NOT EXISTS ram_ids(id INTEGER PRIMARY KEY CHECK(id=1), last INTEGER)')
+        with self.db:
+            row = self.db.execute('SELECT last FROM ram_ids WHERE id=1').fetchone()
+            previous = row[0] if row else self.db.execute(
+                'SELECT coalesce(max(id),0) FROM files WHERE id<2147483648').fetchone()[0]
+            number = previous + 1
+            if number >= 0x80000000:
+                raise CommandError(8)
+            self.db.execute('INSERT OR REPLACE INTO ram_ids VALUES(1,?)', (number,))
+            self.db.execute('INSERT INTO files VALUES(?,?,0)', (number,file_type))
+        return number
 
     def _append(self, file_id, payload, utc):
         if not isinstance(payload, bytes) or len(payload)>1024*1024:
@@ -89,7 +141,21 @@ class FileServices:
     def capture_record(self, payload, utc):
         with self.lock:
             if self.capture is None:raise CommandError(7)
-            self._append(self.capture,payload,utc)
+            if self.capture_params[0] == 0:
+                self._append(self.capture,payload,utc)
+                return
+            db = self._ssd()
+            if not isinstance(payload, bytes) or len(payload) > 1024 * 1024:
+                raise CommandError(4)
+            space = os.statvfs(self.ssd_root)
+            if space.f_bavail * space.f_frsize < len(payload) + 16 * 1024 * 1024:
+                raise CommandError(8)
+            token = self.db.execute('SELECT token FROM ssd_files WHERE file=?',(self.capture,)).fetchone()[0]
+            index, used = db.execute('SELECT count(*),coalesce(sum(length(body)),0) FROM records WHERE token=?',(token,)).fetchone()
+            if used + len(payload) > self.max_bytes:
+                raise CommandError(8)
+            with db:
+                db.execute('INSERT INTO records VALUES(?,?,?,?)',(token,index,int(utc),payload))
 
     def _play(self, records, sinks, rate):
         try:
@@ -144,10 +210,22 @@ class FileServices:
             return b'{}'
         if action=='capture_control' and not p['enabled']:
             if self.capture_driver is None:raise CommandError(7)
-            self.capture_driver.stop()
+            try:
+                self.capture_driver.stop()
+            except Exception:
+                with self.lock:
+                    self.capture = self.capture_params = None
+                raise
             with self.lock:
-                if self.capture is not None:self._complete(self.capture)
-                self.capture=None
+                try:
+                    if self.capture is not None:
+                        if self.capture_params[0]:
+                            token=self.db.execute('SELECT token FROM ssd_files WHERE file=?',(self.capture,)).fetchone()[0]
+                            db=self._ssd()
+                            with db:db.execute('UPDATE clips SET complete=1 WHERE token=?',(token,))
+                        self._complete(self.capture)
+                finally:
+                    self.capture_params = self.capture = None
             return b'{}'
         with self.lock:
             if action in ('playback_link','playback_file'):
@@ -158,13 +236,17 @@ class FileServices:
                 if self.play_thread and self.play_thread.is_alive():raise CommandError(6)
                 if not self.link or not self.selection:raise CommandError(4)
                 s,l=self.selection,self.link
+                if s['file_id'] >= 0x80000000:
+                    self._ssd()
                 row=self.db.execute('SELECT type,complete FROM files WHERE id=?',(s['file_id'],)).fetchone()
                 if not row or row!=(l['file_type'],1):raise CommandError(4)
-                count=self.db.execute('SELECT count(*) FROM frames WHERE file=?',(s['file_id'],)).fetchone()[0]
+                token=self.db.execute('SELECT token FROM ssd_files WHERE file=?',(s['file_id'],)).fetchone()
+                source,table,column,key=(self._ssd(),'records','token',token[0]) if token else (self.db,'frames','file',s['file_id'])
+                count=source.execute(f'SELECT count(*) FROM {table} WHERE {column}=?',(key,)).fetchone()[0]
                 if not 0<=s['start_frame']<=s['end_frame']<count:raise CommandError(4)
                 if s['rate'] not in (1,2,4):raise CommandError(4)
-                records=self.db.execute('SELECT utc,body FROM frames WHERE file=? AND idx BETWEEN ? AND ? AND utc BETWEEN ? AND ? ORDER BY idx',
-                    (s['file_id'],s['start_frame'],s['end_frame'],l['start_utc'],l['end_utc'])).fetchall()
+                records=source.execute(f'SELECT utc,body FROM {table} WHERE {column}=? AND idx BETWEEN ? AND ? AND utc BETWEEN ? AND ? ORDER BY idx',
+                    (key,s['start_frame'],s['end_frame'],l['start_utc'],l['end_utc'])).fetchall()
                 # Preserve record boundaries: byte limit must select complete records.
                 budget=l['byte_count'];chosen=[]
                 for utc,body in records:
@@ -191,20 +273,37 @@ class FileServices:
             elif action=='storage_clean':
                 if self.capture is not None or any(t and t.is_alive() for t in (self.play_thread,self.store_thread)):raise CommandError(6)
                 # Remove only locally owned completed records, never arbitrary paths.
+                if self.ssd_root:
+                    self._ssd()
                 count=self.db.execute('SELECT count(*) FROM files WHERE complete=1').fetchone()[0]
+                tokens=self.db.execute('SELECT token FROM ssd_files WHERE file IN (SELECT id FROM files WHERE complete=1)').fetchall()
+                if tokens:
+                    db=self._ssd()
+                    with db:
+                        db.executemany('DELETE FROM records WHERE token=?',tokens)
+                        db.executemany('DELETE FROM clips WHERE token=?',tokens)
+                        db.executemany('DELETE FROM clip_ids WHERE token=?',tokens)
                 with self.db:
+                    self.db.execute('DELETE FROM ssd_files WHERE file IN (SELECT id FROM files WHERE complete=1)')
                     self.db.execute('DELETE FROM frames WHERE file IN (SELECT id FROM files WHERE complete=1)')
                     self.db.execute('DELETE FROM files WHERE complete=1')
                 self.db.execute('VACUUM')
                 return json.dumps({'deleted_files':count}).encode()
             elif action=='capture_control':
                 if self.capture_driver is None:raise CommandError(7)
-                if p['storage']!=0 or not self._is_memory_store():raise CommandError(7)
-                if self.capture is not None:raise CommandError(6)
-                fid=self._new(1);self.capture=fid
-                try:self.capture_driver.start(p['mode'],self.capture_record)
+                params=(p['storage'],p['mode'])
+                if self.capture is not None:
+                    if self.capture_params==params:return json.dumps({'file_id':self.capture}).encode()
+                    raise CommandError(6)
+                if p['storage']==0 and not self._is_memory_store():raise CommandError(7)
+                db=self._ssd() if p['storage']==1 else None
+                fid=self._new_ssd(db, p['mode']) if db is not None else self._new(1)
+                self.capture=fid
+                self.capture_params=params
+                try:
+                    self.capture_driver.start(p['mode'],self.capture_record)
                 except Exception:
-                    self.capture=None;raise
+                    self.capture=None;self.capture_params=None;raise
                 return json.dumps({'file_id':fid}).encode()
             else:
                 if self.delegate is None:raise CommandError(7)
@@ -220,4 +319,5 @@ class FileServices:
     def close(self):
         self._stop_worker('play');self._stop_worker('store')
         if self.capture_driver and self.capture is not None:self.capture_driver.stop()
+        if self.ssd_store:self.ssd_store.close()
         self.db.close()

@@ -1,11 +1,10 @@
-"""OTA V1.0.0 wire structures; separate from the experimental v1 envelope.
-
-CRC profile must be chosen explicitly by the integrator. No CRC default is
-implied by the source document, which only says 'CRC-16'.
-"""
+"""OTA structures for the 20261119 and V1.0.1 wire profiles."""
 import binascii
 import struct
 from .space_protocol import encode
+
+
+V101_CRC = dict(poly=0x1021, init=0, refin=False, refout=False, xorout=0)
 
 
 def crc16(data, profile):
@@ -23,10 +22,10 @@ def crc16(data, profile):
     return value
 
 
-def control(kind, code, parameters):
+def control(kind, code, parameters, *, ota101=False):
     if kind not in (0x30, 0x32):
         raise ValueError('invalid OTA request type')
-    return encode(bytes((kind, code)) + parameters)
+    return encode(bytes((kind, code)) + parameters, ota101=ota101)
 
 
 def validate_control(payload):
@@ -57,26 +56,26 @@ def validate_control(payload):
     raise ValueError('invalid OTA code, enum or reserved bytes')
 
 
-def reply(code, result):
+def reply(code, result, *, ota101=False):
     if not 0 <= result <= 255:
         raise ValueError('invalid response code')
-    return encode(bytes((0x31, code, result)))
+    return encode(bytes((0x31, code, result)) + (bytes(5) if ota101 else b''), ota101=ota101)
 
 
-def version_reply(version):
+def version_reply(version, *, ota101=False):
     data = version.encode('ascii')
     if not data or len(data) > 501 or any(b < 32 or b > 126 for b in data):
         raise ValueError('invalid firmware version')
-    return encode(b'\x33\x56' + data + b'\x00')
+    return encode(b'\x33\x56' + data + b'\x00', ota101=ota101)
 
 
-def progress_reply(snapshot):
+def progress_reply(snapshot, *, ota101=False):
     """Project extension: 33 53 + exact raw TMG008..014, all big endian."""
     values=[snapshot[f'TMG{i:03}'] for i in range(8,15)]
     if any(type(v) is not int or not 0<=v<(1<<(32 if i<4 else 8)) for i,v in enumerate(values)):
         raise ValueError('invalid progress fields')
     if values[4]>100:raise ValueError('invalid percentage')
-    return encode(b'\x33\x53'+struct.pack('>4IBBB',*values))
+    return encode(b'\x33\x53'+struct.pack('>4IBBB',*values), ota101=ota101)
 
 
 def segment_ranges(total_packets,segments):
@@ -92,10 +91,10 @@ def parse_packet(payload):
     return int.from_bytes(payload[1:5], 'big'), payload[5:]
 
 
-def packet(sequence, data):
+def packet(sequence, data, *, ota101=False):
     if not 0 <= sequence <= 0xffffffff or len(data) != 499:
         raise ValueError('invalid sequence or fixed data size')
-    return encode(b'\x3a' + struct.pack('>I', sequence) + data)
+    return encode(b'\x3a' + struct.pack('>I', sequence) + data, ota101=ota101)
 
 
 def expected_packets(size):
@@ -104,8 +103,10 @@ def expected_packets(size):
     return (size + 6 + 498) // 499
 
 
-def file_packets(data, profile):
+def file_packets(data, profile, *, ota101=False):
+    if ota101 and profile != "XMODEM":
+        raise ValueError("V1.0.1 requires poly=1021 init=0000")
     expected_packets(len(data))
     stream = struct.pack('>IH', len(data), crc16(data, profile)) + data
     for seq, offset in enumerate(range(0, len(stream), 499)):
-        yield packet(seq, stream[offset:offset + 499].ljust(499, b'\x00'))
+        yield packet(seq, stream[offset:offset + 499].ljust(499, b'\x00'), ota101=ota101)

@@ -24,6 +24,7 @@ from .ota_staging import Staging
 from .revised_runtime import Revised
 from .dual_uart import DualUART
 from .board_reboot import BoardReboot
+from .task_scheduler import Scheduler
 
 LOG=logging.getLogger('gs422.payload')
 MEASURED=frozenset(('TMG005','TMG006','TMG007','TMG034'))
@@ -33,7 +34,7 @@ def load_config(path):
     c=json.loads(Path(path).read_text())
     required={'mode','control_port','upload_port','state_root','records_root','telemetry_file',
               'telemetry_max_age','allow_fixture_telemetry','catalog','ota_capacity','enable_reboot'}
-    if not required<=set(c) or set(c)-required-{'fixture_io_root'}:raise ValueError('configuration keys do not match schema')
+    if not required<=set(c) or set(c)-required-{'fixture_io_root','algorithms','ssd_root','ssd_uuid','ota_crc'}:raise ValueError('configuration keys do not match schema')
     if c.get('fixture_io_root') is not None and (not isinstance(c['fixture_io_root'],str) or not Path(c['fixture_io_root']).is_absolute()):
         raise ValueError('fixture IO root must be explicit absolute path')
     if c['mode']!='lab':raise ValueError('only explicitly labelled lab backend is implemented')
@@ -48,6 +49,17 @@ def load_config(path):
     if type(c['allow_fixture_telemetry']) is not bool or type(c['enable_reboot']) is not bool:raise ValueError('boolean settings required')
     if type(c['ota_capacity']) is not int or not 1<=c['ota_capacity']<=256*1024*1024:raise ValueError('OTA capacity out of range')
     import re
+    if c.get('ssd_root') or c.get('ssd_uuid'):
+        if not Path(c.get('ssd_root') or '').is_absolute() or not re.fullmatch(r'[a-zA-Z0-9-]+', c.get('ssd_uuid') or ''):
+            raise ValueError('SSD requires an absolute mount and filesystem UUID')
+    for key, entry in c.get('algorithms', {'1':{'cpu_image':'active'}}).items():
+        if key not in {str(i) for i in range(16)} or set(entry)-{'cpu_image','device','npu_image'}:
+            raise ValueError('invalid algorithm registration')
+        if entry.get('cpu_image')!='active' and not re.fullmatch('sha256:[0-9a-f]{64}',entry.get('cpu_image','')):
+            raise ValueError('algorithm requires immutable CPU image')
+        if 'npu_image' in entry or 'device' in entry:
+            if not re.fullmatch('sha256:[0-9a-f]{64}',entry.get('npu_image','')) or not re.fullmatch('/dev/[A-Za-z0-9_.-]+',entry.get('device','')):
+                raise ValueError('NPU requires an image and local device')
     if not isinstance(c['catalog'],dict):raise ValueError('catalog must be object')
     for digest,entry in c['catalog'].items():
         if not re.fullmatch('[0-9a-f]{64}',digest) or set(entry)!={'image_id','version'}:raise ValueError('bad trusted catalog')
@@ -86,20 +98,24 @@ def serve(c):
         if c.get('fixture_io_root'):
             from .fixture_io import FixtureIO
             fixture=FixtureIO(c['fixture_io_root'])
-            files=FileServices(c['records_root'],sources=fixture.sources,sinks=fixture.sinks,capture_driver=fixture)
+            files=FileServices(c['records_root'],sources=fixture.sources,sinks=fixture.sinks,capture_driver=fixture,
+                               ssd_root=c.get('ssd_root'),ssd_uuid=c.get('ssd_uuid'))
             LOG.warning('EXTERNAL_IO=FILE_FIXTURES not physical devices')
             with files.lock:
                 if not files.db.execute('SELECT 1 FROM files WHERE type=2 AND complete=1').fetchone():
                     fid=files.add_file([(10,b'fixture-alpha'),(10,b'fixture-beta')])
                     LOG.info('FIXTURE_REPLAY_FILE_ID=%d',fid)
         else:
-            files=FileServices(c['records_root'])  # unbound hardware stays unavailable
+            files=FileServices(c['records_root'],ssd_root=c.get('ssd_root'),ssd_uuid=c.get('ssd_uuid'))  # unbound hardware stays unavailable
         reboot=BoardReboot(root/'reboot.json',enabled=True) if c['enable_reboot'] else None
-        backend=PayloadBackend(software,files,reboot=reboot)
-        staging=Staging(root/'ota',crc_profile='CCITT-FALSE',capacity=c['ota_capacity'])
+        scheduler=Scheduler(software,c.get('algorithms',{'1':{'cpu_image':'active'}}))
+        backend=PayloadBackend(software,files,reboot=reboot,scheduler=scheduler)
+        staging=Staging(root/'ota-v101',crc_profile='XMODEM',capacity=c['ota_capacity'])
+        from .ota_wire import V101_CRC
+        staging.crc_config_valid = c.get('ota_crc', V101_CRC) == V101_CRC
         legacy=LegacyUpload(root/'legacy')
         runtime=Revised(staging,Cache(5000),values,version=software.version(),adapter=backend,
-                        software_backend=backend,algorithms_enabled=True,legacy_upload=legacy)
+                        software_backend=backend,algorithms_enabled=True,legacy_upload=legacy,ota101=True)
         runtime.set_telemetry_deadline(deadline)
         def collect():
             previous=None
