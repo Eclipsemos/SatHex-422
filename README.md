@@ -1,5 +1,7 @@
 # SatHex-422：自主串口服务 gs422
 
+X26 lab8 已完成 K1101 普通文件上注、暂停续传与校验后落盘。[收发流程和板上验收](docs/PAYLOAD-CONTROL-20261123.md#lab8-普通文件上注k1101)。
+
 X26 lab7 支持 HT226 Z83 的五个 APP 参数。板上已用 APP1 CPU 样例通过 COM3 验证运行、完成以及结果文件回读。[算法接口与验收](docs/HT226-SHORT-COMMANDS.md#z83-启动算法)。
 
 X26 lab6 新增 HT226 短指令的主备回放、分类清理及固存停止／查询。[参数、执行结果与联试条件](docs/HT226-SHORT-COMMANDS.md)。

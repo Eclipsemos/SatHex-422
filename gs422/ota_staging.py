@@ -5,6 +5,7 @@ This is a software reference backend, not an implementation of a board partition
 driver. A CRC profile and capacity must be supplied by the deployment owner.
 """
 import json
+import os
 from pathlib import Path
 import sqlite3
 import struct
@@ -19,6 +20,7 @@ class Staging:
             raise ValueError('invalid configured staging capacity')
         root = Path(directory)
         root.mkdir(parents=True, exist_ok=True)
+        self.root = root
         self.db = sqlite3.connect(root / 'ota.sqlite3', check_same_thread=False)
         self.db.execute('PRAGMA journal_mode=WAL')
         self.db.execute('PRAGMA synchronous=FULL')
@@ -47,9 +49,17 @@ class Staging:
     def close(self):
         self.db.close()
 
-    def gate(self, enabled):
+    @property
+    def ordinary_gate(self):
+        return self.state['gate'] and self.state.get('ordinary_gate', False)
+
+    @property
+    def ordinary_file(self):
+        return self.state.get('ordinary_file', False)
+
+    def gate(self, enabled, *, ordinary=False):
         with self.lock:
-            self.state['gate'] = bool(enabled)
+            self.state.update(gate=bool(enabled), ordinary_gate=bool(enabled and ordinary))
             self._save()
 
     def begin(self, component, region, mode, segmented=0, segments=0):
@@ -62,13 +72,16 @@ class Staging:
             # one file CRC across batches; no reset of sequence or metadata.
             if segmented not in (0,1) or (segmented==0 and segments!=0) or (segmented==1 and not 1<=segments<=255):
                 return 0xff
+            if self.ordinary_gate and (mode != 2 or (component, region) not in ((3, 1), (4, 2))):
+                return 2
             request = [component, region, mode, segmented, segments]
             if self.state['status'] in (0x20, 0x21):
-                return 0 if request == self.state['request'] else 1
+                return 0 if request == self.state['request'] and self.ordinary_file == self.ordinary_gate else 1
             if self.state['file_id'] == 0xffffffff:
                 return 0xff
             self.db.execute('DELETE FROM packets')
             self.state.update(status=0x20, check=0, errors=0, bus_errors=0,
+                              ordinary_file=self.ordinary_gate, publish_failed=False,
                               file_id=self.state['file_id'] + 1, size=None, checksum=None, request=request, next_missing=0)
             self._save()
             return 0
@@ -85,7 +98,8 @@ class Staging:
     def receive(self, payload):
         """Return local acceptance only. Caller MUST NOT transmit on RX channel."""
         with self.lock:
-            if not self.state['gate'] or self.state['status'] not in (0x20, 0x21):
+            if (not self.state['gate'] or self.ordinary_file != self.ordinary_gate
+                    or self.state['status'] not in (0x20, 0x21)):
                 return False
             try:
                 seq, data = parse_packet(payload)
@@ -147,8 +161,11 @@ class Staging:
 
     def end(self, aborted=False, publish=None):
         with self.lock:
+            if (self.ordinary_file or self.ordinary_gate) and not (
+                    self.ordinary_file and self.ordinary_gate):
+                return 0xff
             if aborted:
-                self.state.update(status=0x40, gate=False)
+                self.state.update(status=0x40, gate=False, publish_failed=False)
                 self._save()
                 return 0xff
             if not self.crc_config_valid:
@@ -159,7 +176,8 @@ class Staging:
                 return 0x11
             if self.state['status'] == 0x23:
                 return 0
-            if self.state['status'] not in (0x20, 0x21) or self.state['size'] is None:
+            if (self.state['status'] not in (0x20, 0x21) and not self.state.get('publish_failed')
+                    or self.state['size'] is None):
                 return 0xff
             if self._missing() != expected_packets(self.state['size']):
                 return 1
@@ -187,21 +205,54 @@ class Staging:
                         for _ in range(8):
                             value = (value >> 1) ^ (0xa001 if value & 1 else 0)
             success = remaining == 0 and value == self.state['checksum']
-            self.state.update(status=0x23 if success else 0x24, check=4 if success else 5)
+            if success and self.ordinary_file:
+                try:
+                    self._publish_file()
+                except OSError:
+                    self.state.update(status=0x40, check=4, publish_failed=True)
+                    self._save()
+                    return 0xff
+            self.state.update(publish_failed=False, status=0x23 if success else 0x24, check=4 if success else 5)
             self._save()
             return 0 if success else 0x11
 
+    def _write_contents(self, stream):
+        remaining = self.state['size']
+        for seq, raw in self.db.execute('SELECT seq,data FROM packets ORDER BY seq'):
+            chunk = (raw[6:] if seq == 0 else raw)[:remaining]
+            remaining -= len(chunk)
+            stream.write(chunk)
+        stream.flush()
+        os.fsync(stream.fileno())
+
+    def _publish_file(self):
+        region = self.state['request'][1]
+        directory = self.root / 'received-files' / f'APP{region}'
+        directory.mkdir(parents=True, exist_ok=True)
+        name = f"{self.state['file_id']:08X}.bin"
+        # A single staging owner holds the session lock. Reuse the same partial
+        # name after a crash and expose the final name only after the file fsync.
+        partial = directory / ('.' + name + '.partial')
+        try:
+            fd = os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_TRUNC |
+                         getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_BINARY', 0), 0o600)
+            with os.fdopen(fd, 'wb') as stream:
+                self._write_contents(stream)
+            os.replace(partial, directory / name)
+            if os.name == 'posix':
+                for path in (directory, directory.parent, self.root):
+                    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+                    try:
+                        os.fsync(fd)
+                    finally:
+                        os.close(fd)
+        finally:
+            partial.unlink(missing_ok=True)
+
     def export_verified(self, destination):
-        """Export to an explicit caller-owned new file, never overwrite a partition."""
+        """Export verified bytes to an explicit caller-owned new file."""
         with self.lock:
             if self.state['status'] != 0x23 or not self.crc_config_valid:
                 raise ValueError('upload is not verified')
             with open(destination, 'xb') as output:
-                remaining = self.state['size']
-                for seq, raw in self.db.execute('SELECT seq,data FROM packets ORDER BY seq'):
-                    chunk = (raw[6:] if seq == 0 else raw)[:remaining]
-                    remaining -= len(chunk)
-                    output.write(chunk)
-                output.flush()
-                import os
-                os.fsync(output.fileno())
+                self._write_contents(output)

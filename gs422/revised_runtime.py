@@ -68,6 +68,7 @@ class Revised:
         self.lock = threading.RLock()
         self.ota_lock = threading.RLock()
         self.control_decoder, self.upload_decoder = Decoder(ota101=ota101), Decoder(ota101=ota101)
+        self.gate_epoch = self.decoder_epoch = 0
         self.operations = queue.Queue(128)
         self.replies = queue.Queue(128)
         self.stop = threading.Event()
@@ -79,6 +80,8 @@ class Revised:
         self.telemetry_deadline = None
         self.legacy = Controller(sensors, LegacyActions(self, adapter or Adapter()), clock=clock,
                                  gate_handler=self.set_legacy_gate)
+        if staging.ordinary_gate:
+            self.legacy.receive_mode = 1
         self._snapshot()
 
     def _select_upload(self, profile):
@@ -101,7 +104,10 @@ class Revised:
         # K1103/02 opens OTA; K1101/01 is ordinary-file mode, not OTA mode.
         # TYPE30/17 retains its independent 01=open,02=close parameter syntax.
         with self.ota_lock:
-            self.staging.gate(mode == 2)
+            previous = (self.staging.state['gate'], self.staging.ordinary_gate)
+            self.staging.gate(mode != 0, ordinary=mode == 1)
+            if previous != (self.staging.state['gate'], self.staging.ordinary_gate):
+                self.gate_epoch += 1
             if mode == 0 and self.legacy_upload is not None:
                 self.legacy_upload.reset()
                 self._select_upload('modern')
@@ -126,7 +132,7 @@ class Revised:
             elif action == 'begin':
                 if self.legacy_upload and self.legacy_upload.state['status'] == 0x20:
                     result = 1
-                elif self.software_backend and not self.software_backend.permits(parameters):
+                elif not self.staging.ordinary_gate and self.software_backend and not self.software_backend.permits(parameters):
                     result = 2
                 else:
                     result = self.staging.begin(**parameters)
@@ -139,6 +145,8 @@ class Revised:
                 result = self.software_backend.ota(action, parameters, self.staging)
                 self._set_erase_status(0x11 if result == 0 else 0x40)
             elif action == 'load' and self.software_backend:
+                if parameters['index'] == 0 and self.upload_profile != 'legacy' and self.staging.ordinary_file:
+                    return 0xff
                 previous = self.raw['TMG014']
                 self._set_erase_status(0x30)
                 if self.upload_profile == 'legacy' and parameters['index'] == 0:
@@ -156,7 +164,7 @@ class Revised:
                     self._set_erase_status(previous if result == 1 else 0x40)
             else:
                 result = 0xff
-            if (action in ('begin','end','load') and result == 0) or (action == 'end' and self.staging.state['status'] == 0x24):
+            if (action in ('begin','end','load') and result == 0) or (action == 'end' and self.staging.state['status'] in (0x24, 0x40)):
                 self._set_erase_status(None)
             self._snapshot()
             return result
@@ -258,9 +266,13 @@ class Revised:
         return bytes(responses)
 
     def feed_upload(self, data=b''):
+        epoch = self.gate_epoch
+        if epoch != self.decoder_epoch:
+            self.upload_decoder.clear()
+            self.decoder_epoch = epoch
         for payload in self.upload_decoder.feed(data):
             try:
-                self.operations.put_nowait(('data', payload, None, None))
+                self.operations.put_nowait(('data', payload, epoch, None))
             except queue.Full:
                 # No data-channel acknowledgement, even on overload.
                 with self.lock:
@@ -270,7 +282,7 @@ class Revised:
         errors = self.upload_decoder.checksum_errors + self.upload_decoder.format_errors
         for _ in range(errors - self.upload_errors):
             try:
-                self.operations.put_nowait(('error', None, None, None))
+                self.operations.put_nowait(('error', None, epoch, None))
             except queue.Full:
                 self.bus_errors += 1
                 with self.lock:
@@ -289,13 +301,16 @@ class Revised:
         try:
             if kind == 'data':
                 with self.ota_lock:
+                    if action != self.gate_epoch:
+                        return True
                     before = self.staging.state['bus_errors']
                     self.staging.receive(payload)
                     self.bus_errors += (self.staging.state['bus_errors'] - before) & 255
             elif kind == 'error':
-                self.bus_errors += 1
-                with self.staging.lock:
-                    self.staging._error()
+                with self.ota_lock, self.staging.lock:
+                    if action == self.gate_epoch:
+                        self.bus_errors += 1
+                        self.staging._error()
             else:
                 result = self.run_ota(action, parameters)
                 self.replies.put_nowait(reply(payload[1], result, ota101=self.ota101))
