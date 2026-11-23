@@ -10,7 +10,7 @@ from .space_commands import CommandError
 
 class PayloadBackend:
     timeout=30
-    FILE_ACTIONS=frozenset(('storage_clean','playback_link','playback_file','playback_start',
+    FILE_ACTIONS=frozenset(('short_status','short_clean','short_link','short_list','short_start','storage_clean','playback_link','playback_file','playback_start',
                            'playback_stop','storage_start','storage_stop','storage_status','capture_control'))
     SOFTWARE_ACTIONS=frozenset(('task_start','task_stop','task_pause','software_resume','software_stop','firmware_version'))
 

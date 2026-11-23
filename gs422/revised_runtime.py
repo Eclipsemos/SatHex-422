@@ -10,7 +10,7 @@ import time
 from . import tmg
 from .space_protocol import Decoder, Message, encode
 from .space_runtime import Controller, Adapter
-from .space_commands import CommandError
+from .space_commands import CommandError, SHORT_CODES
 from .ota_wire import validate_control, reply, version_reply, progress_reply
 
 
@@ -194,6 +194,12 @@ class Revised:
     def feed_control(self, data=b''):
         responses = bytearray()
         for payload in self.control_decoder.feed(data):
+            if len(payload) >= 2 and payload[0] == 0x21 and payload[1] in SHORT_CODES:
+                if self.legacy.handle_short(payload):
+                    self.correct += 1
+                else:
+                    self.incorrect += 1
+                continue
             if payload[:1] == b'\xcc':
                 # Proposed broadcast subtype 01. No sequence or acknowledgement.
                 if len(payload) == 6 and payload[1] == 1:

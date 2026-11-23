@@ -18,6 +18,7 @@ from . import tmg
 from .core import Cache
 from .durable_demo import DurableDemo
 from .file_services import FileServices
+from .ht226_files import PublishedFiles
 from .payload_backend import PayloadBackend
 from .legacy_upload import LegacyUpload
 from .ota_staging import Staging
@@ -34,9 +35,11 @@ def load_config(path):
     c=json.loads(Path(path).read_text())
     required={'mode','control_port','upload_port','state_root','records_root','telemetry_file',
               'telemetry_max_age','allow_fixture_telemetry','catalog','ota_capacity','enable_reboot'}
-    if not required<=set(c) or set(c)-required-{'fixture_io_root','algorithms','ssd_root','ssd_uuid','ota_crc'}:raise ValueError('configuration keys do not match schema')
+    if not required<=set(c) or set(c)-required-{'fixture_io_root','algorithms','ssd_root','ssd_uuid','ota_crc','ht226_root'}:raise ValueError('configuration keys do not match schema')
     if c.get('fixture_io_root') is not None and (not isinstance(c['fixture_io_root'],str) or not Path(c['fixture_io_root']).is_absolute()):
         raise ValueError('fixture IO root must be explicit absolute path')
+    if 'ht226_root' in c and not Path(c['ht226_root']).is_absolute():
+        raise ValueError('ht226_root must be absolute')
     if c['mode']!='lab':raise ValueError('only explicitly labelled lab backend is implemented')
     for key in ('control_port','upload_port','state_root','records_root','telemetry_file'):
         if not isinstance(c[key],str) or not Path(c[key]).is_absolute():raise ValueError(key+' must be absolute')
@@ -94,11 +97,19 @@ def serve(c):
         # Require initial measurements before creating state or taking either UART.
         values,deadline=measurement_snapshot(c['telemetry_file'],c['telemetry_max_age'],c['allow_fixture_telemetry'])
         software=DurableDemo(root/'software',c['catalog'])
+        published = PublishedFiles(c['ht226_root']) if 'ht226_root' in c else None
         fixture=None
         if c.get('fixture_io_root'):
             from .fixture_io import FixtureIO
             fixture=FixtureIO(c['fixture_io_root'])
-            files=FileServices(c['records_root'],sources=fixture.sources,sinks=fixture.sinks,capture_driver=fixture,
+            if published is None:
+                from .space_commands import REPLAY_TYPES
+                published = PublishedFiles(fixture.root / 'ht226')
+                for group, types in [('replay', REPLAY_TYPES), ('clean', range(1, 7))]:
+                    for file_type in types:
+                        (published.root / group / f'{file_type:02X}').mkdir(parents=True, exist_ok=True)
+            files=FileServices(c['records_root'], published=published,
+                               replay_sinks={link:fixture.file_sink(link) for link in (0,1)},sources=fixture.sources,sinks=fixture.sinks,capture_driver=fixture,
                                ssd_root=c.get('ssd_root'),ssd_uuid=c.get('ssd_uuid'))
             LOG.warning('EXTERNAL_IO=FILE_FIXTURES not physical devices')
             with files.lock:
@@ -106,7 +117,7 @@ def serve(c):
                     fid=files.add_file([(10,b'fixture-alpha'),(10,b'fixture-beta')])
                     LOG.info('FIXTURE_REPLAY_FILE_ID=%d',fid)
         else:
-            files=FileServices(c['records_root'],ssd_root=c.get('ssd_root'),ssd_uuid=c.get('ssd_uuid'))  # unbound hardware stays unavailable
+            files=FileServices(c['records_root'],published=published,ssd_root=c.get('ssd_root'),ssd_uuid=c.get('ssd_uuid'))  # unbound hardware stays unavailable
         reboot=BoardReboot(root/'reboot.json',enabled=True) if c['enable_reboot'] else None
         scheduler=Scheduler(software,c.get('algorithms',{'1':{'cpu_image':'active'}}))
         backend=PayloadBackend(software,files,reboot=reboot,scheduler=scheduler)

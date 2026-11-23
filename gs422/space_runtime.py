@@ -10,7 +10,7 @@ import subprocess
 import threading
 import time
 
-from .space_commands import CommandError, validate
+from .space_commands import CommandError, validate, validate_short
 from .space_protocol import Message, Reassembler
 
 
@@ -82,6 +82,10 @@ class Adapter:
             p.stdout.close()
 
 
+class ShortCommand(Message):
+    """HT226 has no on-wire sequence. The local receipt number is informational."""
+
+
 class Controller:
     def __init__(self, sensors, adapter=None, clock=time.monotonic, gate_handler=None):
         self.sensors, self.adapter, self.clock = sensors, adapter or Adapter(), clock
@@ -117,7 +121,17 @@ class Controller:
                 self.executed += 1
             if len(self.results) == self.results.maxlen:
                 self.dropped += 1
+            if isinstance(message, ShortCommand):
+                result = json.loads(data) if data else {}
+                keys = ('link', 'count', 'file_type', 'deleted_files', 'state', 'frames', 'bytes',
+                        'crc_errors', 'play_state', 'play_frames')
+                detail = {k: result[k] for k in keys if k in result and isinstance(result[k], (int,type(None)))}
+                detail.update(device=1 if message.code == 0x13 else 2, words=message.body[:6].hex(),
+                              receipt=message.sequence, exit=error)
+                data = json.dumps(detail, separators=(',', ':')).encode()
             self.results.append((message.sequence, message.code, status, error, data))
+            if isinstance(message, ShortCommand):
+                return
             entry = self.seen.get(message.sequence)
             if entry and entry[0] == message.payload():
                 self.seen[message.sequence] = (entry[0], True)
@@ -137,6 +151,22 @@ class Controller:
         body = struct.pack('>8IHBBHH4iBBH', *(v & 0xffffffff for v in counters),
                            *self.latest, valid, *values, self.receive_mode, self.work.qsize(), 0)
         return Message(0x12, message.sequence, 0, body).payload()
+
+    def handle_short(self, payload):
+        with self.lock:
+            self.rx += 1
+            message = ShortCommand(0x21, self.rx & 0xffff, payload[1], payload[2:])
+            try:
+                action, parameters = validate_short(message.code, message.body)
+                self.work.put_nowait((message, action, parameters))
+            except CommandError as error:
+                self._result(message, 4, error.error)
+                return False
+            except queue.Full:
+                self._result(message, 4, 6)
+                return False
+            self.latest = (message.sequence, message.code, 1, 0)
+            return True
 
     def handle(self, payload):
         with self.lock:

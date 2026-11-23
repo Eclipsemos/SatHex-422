@@ -13,14 +13,14 @@ import time
 import zlib
 import uuid
 import stat
-from .space_commands import CommandError
+from .space_commands import CommandError, REPLAY_TYPES
 
 
 class FileServices:
     timeout = 5
 
     def __init__(self, root, *, sources=None, sinks=None, capture_driver=None, ssd_root=None, ssd_uuid=None,
-                 delegate=None, max_bytes=64*1024*1024):
+                 published=None, replay_sinks=None, delegate=None, max_bytes=64*1024*1024):
         self.root = Path(root).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(self.root/'records.sqlite3', check_same_thread=False)
@@ -34,6 +34,10 @@ class FileServices:
         self.ssd_uuid = ssd_uuid
         self.capture_params = self.ssd_store = None
         self.db.execute("CREATE TABLE IF NOT EXISTS ssd_files(file INTEGER PRIMARY KEY, token TEXT UNIQUE NOT NULL)")
+        self.published = published
+        self.replay_sinks = replay_sinks or {}
+        self.short_link = self.short_selection = None
+        self.play_frames = 0
         self.max_bytes = max_bytes
         self.link = self.selection = None
         self.capture = None
@@ -178,6 +182,46 @@ class FileServices:
             if self.play_cancel.is_set():
                 with self.lock:self.play_state=3
 
+    def _sent_frame(self):
+        with self.lock:
+            self.play_frames += 1
+
+    def _play_list(self, selection, sink):
+        try:
+            self.published.send(*selection, sink, self.play_cancel, self._sent_frame)
+            with self.lock:
+                self.play_state = 3 if self.play_cancel.is_set() else 2
+        except Exception as error:
+            with self.lock:
+                self.play_state = 3
+                self.last_error = type(error).__name__
+
+    def _short_playback(self, action, p):
+        if self.play_thread and self.play_thread.is_alive():
+            raise CommandError(6)
+        if action == 'short_link':
+            self.short_link = p['link']
+            return json.dumps({'link': self.short_link}).encode()
+        if self.published is None:
+            raise CommandError(7)
+        if action == 'short_list':
+            self.short_selection = None
+            if p['file_type'] not in REPLAY_TYPES or not 1 <= p['count'] <= 255:
+                raise CommandError(4)
+            files = self.published.newest(p['file_type'], p['count'])
+            self.short_selection = (p['file_type'], files)
+            return json.dumps({'count': len(files), 'file_type': p['file_type']}).encode()
+        if self.short_selection is None:
+            raise CommandError(4)
+        if self.short_link not in self.replay_sinks:
+            raise CommandError(7)
+        self.play_cancel.clear()
+        self.play_state, self.play_file, self.play_frames, self.last_error = 1, None, 0, None
+        self.play_thread = threading.Thread(target=self._play_list, daemon=True,
+                                           args=(self.short_selection, self.replay_sinks[self.short_link]))
+        self.play_thread.start()
+        return b'{"state":1}'
+
     def _store(self, source, start, count, fid):
         try:
             received=0
@@ -228,6 +272,14 @@ class FileServices:
                     self.capture_params = self.capture = None
             return b'{}'
         with self.lock:
+            if action in ('short_link','short_list','short_start'):
+                return self._short_playback(action, p)
+            if action == 'short_clean':
+                if self.capture is not None or any(t and t.is_alive() for t in (self.play_thread,self.store_thread)):
+                    raise CommandError(6)
+                if self.published is None:
+                    raise CommandError(7)
+                return json.dumps({'deleted_files':self.published.clean(p['file_type'])}).encode()
             if action in ('playback_link','playback_file'):
                 if self.play_thread and self.play_thread.is_alive():raise CommandError(6)
                 if action=='playback_link':self.link=dict(p)
@@ -268,6 +320,10 @@ class FileServices:
                 self.store_cancel.clear()
                 self.store_thread=threading.Thread(target=self._store,args=(self.sources[p['file_id']],p['start_frame'],p['frame_count'],fid),daemon=True)
                 self.store_thread.start()
+            elif action == 'short_status':
+                return json.dumps(dict(state=self.store_state,frames=self.store_frames,bytes=self.store_bytes,
+                                       crc_errors=self.crc_errors,link=self.short_link,
+                                       play_state=self.play_state,play_frames=self.play_frames)).encode()
             elif action=='storage_status':
                 return json.dumps({'state':self.store_state,'frames':self.store_frames,'bytes':self.store_bytes,'crc_errors':self.crc_errors,'file_id':self.store_file,'error':self.last_error}).encode()
             elif action=='storage_clean':

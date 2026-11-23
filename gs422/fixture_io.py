@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import tempfile
 import threading
 import time
 import zlib
@@ -13,6 +14,27 @@ class FixtureIO:
         self.cancel=threading.Event();self.thread=None;self.error=None
         self.sources={7:self.solid_source}
         self.sinks={1:self.sink('downlink-1.bin'),2:self.sink('downlink-2.bin')}
+
+    def file_sink(self, link):
+        directory = self.root / ('main-downlink' if link == 0 else 'backup-downlink')
+        directory.mkdir(exist_ok=True)
+        def send(name, source, cancel, progress):
+            with tempfile.NamedTemporaryFile(dir=directory, prefix='.partial-', delete=False) as output:
+                partial = Path(output.name)
+                try:
+                    while not cancel.is_set():
+                        block = source.read(4096)
+                        if not block:
+                            output.flush()
+                            os.fsync(output.fileno())
+                            output.close()
+                            os.replace(partial, directory / name)
+                            return
+                        output.write(block)
+                        progress()
+                finally:
+                    partial.unlink(missing_ok=True)
+        return send
 
     def solid_source(self,start,count,cancel):
         frames=[b'fixture-solid-0',b'fixture-solid-1',b'fixture-solid-2']
