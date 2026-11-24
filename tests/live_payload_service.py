@@ -67,15 +67,17 @@ def main():
             start();assert tm()['TMG006']==40
             assert request(control(0x30,0x17,b'\x01'+bytes(5),ota101=True))==b'\x31\x17\x00'+bytes(5)
             assert request(control(0x30,0x53,bytes([3,1,2,0,0,0]),ota101=True))==b'\x31\x53\x00'+bytes(5)
-            packets=list(file_packets(b'x'*700,'XMODEM',ota101=True))
+            packets=list(file_packets(b'\xff'*499,'XMODEM',ota101=True))
             os.write(um,packets[0]);time.sleep(.1);assert tm()['TMG010']==1
             stop();assert process.returncode==0
-            start();assert tm()['TMG010']==1
+            start()
+            progress=tm()
+            assert (progress['TMG010'],progress['TMG012'])==(1,98)
             os.write(um,packets[1]);time.sleep(.1)
             assert request(control(0x30,0x54,bytes(6),ota101=True))==b'\x31\x54\x00'+bytes(5)
             assert tm()['TMG014']==0x23
             assert not select.select([um],[],[],.05)[0]
-            print('PASS configured daemon stop/start and persisted upload resume',flush=True)
+            print('PASS 499-byte file resumes at 493 bytes (98%) after daemon restart',flush=True)
             paused.set();time.sleep(.9)
             assert tm()['TMG006']==0xff
             assert request(control(0x30,0x56,bytes(6),ota101=True))==b'\x33\x56UNCONFIGURED\x00'

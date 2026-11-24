@@ -93,8 +93,10 @@ class Status(unittest.TestCase):
         bad = first[:-4] + bytes.fromhex('f24009d7')
         self.send(bad)
         self.assertEqual(self.status(0x20)['TMG010'],0)
-        for frame in (first,last):
+        for frame in (first,first):
             self.send(frame)
+            self.assertEqual(self.status(0x20)['TMG012'],98)
+        self.send(last)
         self.op(0x54,bytes(6))
         values = self.status(0x23)
         self.assertEqual((values['TMG010'],values['TMG012'],values['TMG013']), (2,100,4))
@@ -110,7 +112,7 @@ class Status(unittest.TestCase):
             self.send(frames[idx])
         self.op(0x54, bytes(6), 1)
         values = self.status(0x20)
-        self.assertEqual((values['TMG009'], values['TMG010']), (1,2))
+        self.assertEqual((values['TMG009'], values['TMG010'], values['TMG012']), (1,2,64))
         self.send(frames[1])
         self.status(0x20)
         arrived, release = threading.Event(), threading.Event()
@@ -144,6 +146,14 @@ class Status(unittest.TestCase):
         self.status(0xff)
         self.begin()
         self.status(0x20)
+
+    def test_z53_unknown_region_vs_bad_reserved_byte(self):
+        for region in (0,5,255):
+            frame = control(0x30,0x53,bytes([3,region,2,0,0,0]),ota101=True)
+            self.assertEqual(self.r.feed_control(frame),bytes.fromhex('eb9000083153020000000000008609d7'))
+            self.status(0x20)
+        malformed = control(0x30,0x53,bytes([3,2,2,0,0,1]),ota101=True)
+        self.assertEqual(self.r.feed_control(malformed),reply(0x53,0xff,ota101=True))
 
     def test_obc_wire_requests(self):
         r = self.r

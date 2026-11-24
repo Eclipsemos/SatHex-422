@@ -11,7 +11,7 @@ from . import tmg
 from .space_protocol import Decoder, Message, encode
 from .space_runtime import Controller, Adapter
 from .space_commands import CommandError, SHORT_CODES
-from .ota_wire import validate_control, reply, version_reply, progress_reply
+from .ota_wire import InvalidStorageRegion, validate_control, reply, version_reply, progress_reply
 
 
 class LegacyActions:
@@ -246,10 +246,11 @@ class Revised:
                     continue
                 try:
                     action, parameters = validate_control(payload)
-                except ValueError:
+                except ValueError as error:
                     self.incorrect += 1
                     if len(payload) >= 2:
-                        responses.extend(reply(payload[1], 0xff, ota101=self.ota101))
+                        result = 2 if isinstance(error, InvalidStorageRegion) else 0xff
+                        responses.extend(reply(payload[1], result, ota101=self.ota101))
                     continue
                 self.correct += 1
                 if action == 'version':

@@ -153,10 +153,19 @@ class Staging:
     def snapshot(self):
         with self.lock:
             count = self.db.execute('SELECT count(*) FROM packets').fetchone()[0]
-            total = expected_packets(self.state['size']) if self.state['size'] else 0
+            size = self.state['size']
+            total = expected_packets(size) if size else 0
+            percent = 0
+            if count and size:
+                # The first accepted packet must be seq 0. It contains 6 header
+                # bytes; only the final packet can contain zero padding.
+                received = count * 499 - 6
+                if self.db.execute('SELECT 1 FROM packets WHERE seq=?', (total - 1,)).fetchone():
+                    received -= total * 499 - 6 - size
+                percent = 100 * received // size
             missing = self._missing()
             return dict(TMG008=self.state['file_id'], TMG009=missing if not total or missing < total else 0xffffffff,
-                        TMG010=count, TMG011=self.state['errors'], TMG012=(100 * count // total if total else 0),
+                        TMG010=count, TMG011=self.state['errors'], TMG012=percent,
                         TMG013=self.state['check'], TMG014=self.state['status'])
 
     def end(self, aborted=False, publish=None):

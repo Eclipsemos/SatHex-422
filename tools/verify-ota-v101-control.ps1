@@ -54,5 +54,5 @@ try {
     $v=Read-Frame
     $version=[Text.Encoding]::ASCII.GetString([Convert]::FromHexString($v.Substring(12,$v.Length-22)))
     if (!$Installed -and $version -ne 'CONTROL-QA'){throw "fixture version $version"}
-    [pscustomobject]@{port=$PortName;profile='V1.0.1';installed=[bool]$Installed;version=$version;frames=$rows} | ConvertTo-Json
+    [pscustomobject]@{port=$PortName;profile='V1.0.2';installed=[bool]$Installed;version=$version;frames=$rows} | ConvertTo-Json
 }finally { $port.Dispose() }

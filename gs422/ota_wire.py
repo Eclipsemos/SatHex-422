@@ -1,4 +1,4 @@
-"""OTA structures for the 20261119 and V1.0.1 wire profiles."""
+"""OTA structures for the 20261119 legacy and V1.0.2 OTA wire profiles."""
 import binascii
 import struct
 from .space_protocol import encode
@@ -28,6 +28,10 @@ def control(kind, code, parameters, *, ota101=False):
     return encode(bytes((kind, code)) + parameters, ota101=ota101)
 
 
+class InvalidStorageRegion(ValueError):
+    """Z53 cannot target the specified storage region (reply 02H)."""
+
+
 def validate_control(payload):
     if len(payload) != 8 or payload[0] not in (0x30, 0x32):
         raise ValueError('OTA control requires TYPE CODE and six parameter bytes')
@@ -41,11 +45,13 @@ def validate_control(payload):
         return 'gate', {'enabled': w[0] == 1}
     if code == 4 and w[0] == 0 and (w[1] <= 0x80 or w[1] >= 0xf0) and not any(w[2:]):
         return 'load', {'index': w[1]}
-    if code == 0x53 and w[0] in range(1, 5) and w[1] in range(1, 5) and w[2] in (1, 2) and w[3] in (0, 1) and w[5] == 0:
+    if code == 0x53 and w[0] in range(1, 5) and w[2] in (1, 2) and w[3] in (0, 1) and w[5] == 0:
         if w[3] == 1 and w[4] == 0:
             raise ValueError('segmented transfer needs a nonzero segment count')
         if w[3] == 0 and w[4] != 0:
             raise ValueError('unused segment count must be zero in selected profile')
+        if w[1] not in range(1, 5):
+            raise InvalidStorageRegion('unknown storage region')
         return 'begin', dict(component=w[0], region=w[1], mode=w[2], segmented=w[3], segments=w[4])
     if code == 0x54 and w[0] in (0, 255) and not any(w[1:]):
         return 'end', {'aborted': w[0] == 255}

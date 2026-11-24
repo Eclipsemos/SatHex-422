@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 
 ROOT=Path(__file__).resolve().parents[1]
-VERSION='0.1.0~lab9'
+VERSION='0.1.0~lab10'
 
 
 def main():
