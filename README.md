@@ -1,5 +1,7 @@
 # SatHex-422：自主串口服务 gs422
 
+[OTA V1.0.2 附录 A 校核与 499 B 文件联调向量](docs/PAYLOAD-CONTROL-20261123.md#v102-附录-a-校核2026-11-24)。
+
 当前 X26 使用 lab9。[星务遥测、SUM16、17H 分流与输入电压联试修订](docs/PAYLOAD-CONTROL-20261123.md)。
 
 X26 lab8 已完成 K1101 普通文件上注、暂停续传与校验后落盘。[收发流程和板上验收](docs/PAYLOAD-CONTROL-20261123.md#lab8-普通文件上注k1101)。

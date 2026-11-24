@@ -1,4 +1,5 @@
-"""Independent literal wire vectors and externally observable OTA transitions."""
+"""Independent OTA V1.0.2 wire vectors and externally observable transitions."""
+from pathlib import Path
 import tempfile
 import threading
 import unittest
@@ -78,6 +79,30 @@ class Status(unittest.TestCase):
         self.assertEqual(self.r.feed_upload(frame), b'')
         self.assertTrue(self.r.execute_next())
         self.assertEqual(self.r.drain_replies(), b'')
+
+    def test_appendix_a_499_ff_file_on_separate_channels(self):
+        # Hand-built test oracle: file metadata is part of the frame checksum,
+        # but is excluded from the file CRC along with the tail padding.
+        first = (bytes.fromhex('eb9001f83a00000000000001f380e3') + b'\xff'*493
+                 + bytes.fromhex('eda409d7'))
+        last = (bytes.fromhex('eb9001f83a00000001') + b'\xff'*6 + bytes(493)
+                + bytes.fromhex('063509d7'))
+        content = b'\xff'*499
+        self.assertEqual(list(file_packets(content,'XMODEM',ota101=True)), [first,last])
+        self.assertEqual(self.r.feed_control(self.query), bytes.fromhex('eb9000023320005309d7'))
+        bad = first[:-4] + bytes.fromhex('f24009d7')
+        self.send(bad)
+        self.assertEqual(self.status(0x20)['TMG010'],0)
+        for frame in (first,last):
+            self.send(frame)
+        self.op(0x54,bytes(6))
+        values = self.status(0x23)
+        self.assertEqual((values['TMG010'],values['TMG012'],values['TMG013']), (2,100,4))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)/'received.bin'
+            self.staging.export_verified(path)
+            self.assertEqual(path.read_bytes(),content)
+        self.assertFalse(Decoder(ota101=True).feed(bytes.fromhex('eb900009335656322e302e300001df09d7')))
 
     def test_z54_complete_phase_visible_and_unknown_fault_recovers(self):
         frames = list(file_packets(b'\xff'*1400, 'XMODEM', ota101=True))
