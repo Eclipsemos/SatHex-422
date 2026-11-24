@@ -21,7 +21,7 @@ from gs422.file_services import FileServices
 from gs422.fixture_io import FixtureIO
 from gs422.measurements import Measurements
 from gs422.ota_staging import Staging
-from gs422.ota_wire import file_packets
+from gs422.ota_wire import file_packets, control, reply
 from gs422.payload_backend import PayloadBackend
 from gs422.revised_runtime import Revised
 from gs422.space_protocol import Decoder, Message, encode
@@ -77,6 +77,18 @@ class Link:
         result, data = self.result(code, success)
         assert int.from_bytes(result[1:3],'big') == self.seq
         return data
+
+    def ota_gate(self, enabled):
+        words = bytes((1 if enabled else 2,)) + bytes(5)
+        os.write(self.master, control(0x30,0x17,words,ota101=True))
+        expected = reply(0x17,0,ota101=True)
+        received = bytearray()
+        deadline = time.monotonic()+3
+        while len(received)<len(expected) and time.monotonic()<deadline:
+            self.transport.pump()
+            if select.select([self.master],[],[],0)[0]:
+                received.extend(os.read(self.master,4096))
+        assert received == expected
 
     def until(self, predicate, timeout=5):
         deadline = time.monotonic()+timeout
@@ -161,7 +173,7 @@ def main():
         link.command(0x53,request)
         os.write(um,frames[0])
         link.until(lambda v:v['TMG010']==1)
-        link.command(0x17,bytes(6))
+        link.command(0x17,b'\x02'+bytes(5))
         os.write(um,frames[1])
         for _ in range(4):
             assert link.tm()['TMG010']==1
@@ -177,7 +189,7 @@ def main():
         assert output.read_bytes()==payload
         record(['K1101','K1102'], result='PASS', verified=len(payload), closed_count=1,
                received=ordinary['TMG010'], file=output.name)
-        link.command(0x17,b'\x02'+bytes(5))
+        link.ota_gate(True)
         link.command(0x53,request)
         broken = bytearray(frames[0])
         broken[-3] ^= 1
@@ -186,11 +198,11 @@ def main():
         assert e['TMG010']==0
         os.write(um,frames[0])
         link.until(lambda v:v['TMG010']==1)
-        link.command(0x17,bytes(6))
+        link.ota_gate(False)
         os.write(um,frames[1])
         for _ in range(4):
             assert link.tm()['TMG010']==1
-        link.command(0x17,b'\x02'+bytes(5))
+        link.ota_gate(True)
         for frame in frames[1:]:
             os.write(um,frame)
         link.until(lambda v:v['TMG010']==len(frames))

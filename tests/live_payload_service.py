@@ -77,9 +77,9 @@ def main():
             assert not select.select([um],[],[],.05)[0]
             print('PASS configured daemon stop/start and persisted upload resume',flush=True)
             paused.set();time.sleep(.9)
-            request(Message(0x11,2,0).wire(),False)
+            assert tm()['TMG006']==0xff
             assert request(control(0x30,0x56,bytes(6),ota101=True))==b'\x33\x56UNCONFIGURED\x00'
-            print('PASS expired measurements suppress telemetry while controls work',flush=True)
+            print('PASS expired measurements report invalid markers while controls work',flush=True)
             paused.clear();time.sleep(.4);assert tm()['TMG006']==40
             print('PASS fresh measurements restore telemetry; no fake missing zeros',flush=True)
         finally:

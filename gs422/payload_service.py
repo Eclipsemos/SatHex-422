@@ -96,8 +96,9 @@ def serve(c):
     collector=None
     root=Path(c['state_root'])
     try:
-        # Require initial measurements before creating state or taking either UART.
-        values,deadline=measurement_snapshot(c['telemetry_file'],c['telemetry_max_age'],c['allow_fixture_telemetry'])
+        values = dict.fromkeys(tmg.BY_ID, 0)
+        values.update(tmg.INVALID)
+        deadline = 0  # The collector sets freshness after its first valid sample.
         software=DurableDemo(root/'software',c['catalog'])
         published = PublishedFiles(c['ht226_root']) if 'ht226_root' in c else None
         fixture=None

@@ -16,18 +16,18 @@ class Appendix(unittest.TestCase):
     def test_complete_examples(self):
         zeros = bytes(6)
         for code, params, checksum, ack in [
-            (0x55, bytes.fromhex('010000000000'), '008e', '008e'),
-            (0x53, bytes.fromhex('010201000000'), '008f', '008c'),
-            (0x54, zeros, '008c', '008d'), (4, zeros, '003c', '003d')
+            (0x55, bytes.fromhex('010000000000'), '0086', '0086'),
+            (0x53, bytes.fromhex('010201000000'), '0087', '0084'),
+            (0x54, zeros, '0084', '0085'), (4, zeros, '0034', '0035')
         ]:
             expected = bytes.fromhex(f'eb90000830{code:02x}{params.hex()}{checksum}09d7')
             self.assertEqual(control(0x30, code, params, ota101=True), expected)
             self.assertEqual(reply(code, 0, ota101=True),
                              bytes.fromhex(f'eb90000831{code:02x}000000000000{ack}09d7'))
         self.assertEqual(control(0x30, 0x56, zeros, ota101=True),
-                         bytes.fromhex('eb9000083056000000000000008e09d7'))
-        for version, expected in [('V1.2.3', 'eb900009335656312e322e330001da09d7'),
-                                  ('V2.0.0', 'eb900009335656322e302e300001d609d7')]:
+                         bytes.fromhex('eb9000083056000000000000008609d7'))
+        for version, expected in [('V1.2.3', 'eb900009335656312e322e330001d109d7'),
+                                  ('V2.0.0', 'eb900009335656322e302e300001cd09d7')]:
             self.assertEqual(version_reply(version, ota101=True), bytes.fromhex(expected))
         self.assertEqual(Decoder(ota101=True).feed(bytes.fromhex('eb900009335656322e302e300001e809d7')), [])
 
@@ -35,7 +35,7 @@ class Appendix(unittest.TestCase):
         for data, expected in [(b'', 0), (b'\0', 0), (b'\xff', 0x1ef0),
                                (b'123456789', 0x31c3), (b'\xff'*128, 0xeda9), (b'\xff'*499, 0x80e3)]:
             self.assertEqual(crc16(data, 'XMODEM'), expected)
-        for seq, total in [(0, 'f240'), (1, 'f241')]:
+        for seq, total in [(0, 'f147'), (1, 'f148')]:
             raw = packet(seq, b'\xff'*499, ota101=True)
             self.assertEqual(len(raw), 512)
             self.assertEqual(raw[-4:], bytes.fromhex(total + '09d7'))
@@ -45,7 +45,7 @@ class Appendix(unittest.TestCase):
 
 
 class Status(unittest.TestCase):
-    query = bytes.fromhex('eb9000023214004809d7')
+    query = bytes.fromhex('eb9000023214004609d7')
 
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
@@ -68,7 +68,7 @@ class Status(unittest.TestCase):
     def status(self, expected):
         raw = self.r.feed_control(self.query)
         self.assertEqual(raw, bytes.fromhex('eb90000233') + bytes([expected]) +
-                         (0x35+expected).to_bytes(2,'big') + bytes.fromhex('09d7'))
+                         (0x33+expected).to_bytes(2,'big') + bytes.fromhex('09d7'))
         body = Message.parse(Decoder().feed(self.r.feed_control(Message(0x11,9,0).wire()))[0]).body
         values = tmg.unpack(body)
         self.assertEqual(values['TMG014'], expected)
@@ -119,6 +119,44 @@ class Status(unittest.TestCase):
         self.status(0xff)
         self.begin()
         self.status(0x20)
+
+    def test_obc_wire_requests(self):
+        r = self.r
+        r.version = 'sample-v1'
+        version = bytes.fromhex('eb90000c335673616d706c652d76310003df09d7')
+        self.assertEqual(r.feed_control(bytes.fromhex('eb9000083056000000000000008609d7')),version)
+        self.assertFalse(r.feed_control(bytes.fromhex('eb9000083056000000000000008e09d7')))
+        values = dict.fromkeys(tmg.BY_ID,0)
+        values['TMG034'] = 1256
+        r.update_telemetry(values)
+        for wire, header in [('eb90000111001109d7','12'),('eb9000021100001109d7','1200'),
+                             ('eb9000081100000000000000001109d7','1200')]:
+            out, = Decoder().feed(r.feed_control(bytes.fromhex(wire)))
+            self.assertTrue(out.startswith(bytes.fromhex(header)))
+            self.assertEqual(tmg.unpack(out[len(bytes.fromhex(header)):])['TMG034'],1256)
+        r.set_telemetry_deadline(0)
+        out, = Decoder().feed(r.feed_control(bytes.fromhex('eb90000111001109d7')))
+        self.assertEqual(tmg.unpack(out[1:])['TMG034'],65535)
+
+    def test_obc_gate_separation(self):
+        r = self.r
+        def ordinary(v, wrapped=False):
+            w = bytes([v])+bytes(5)
+            frame = Message(0x21,17,0x17,w).wire() if wrapped else encode(bytes([0x21,0x17])+w)
+            self.assertFalse(r.feed_control(frame))
+            self.assertTrue(r.legacy.execute_next())
+        ordinary(1)
+        self.assertTrue(self.staging.ordinary_gate)
+        self.op(0x17,bytes([2])+bytes(5))
+        self.assertTrue(self.staging.ordinary_gate)
+        ordinary(2,True)
+        self.assertFalse(self.staging.state['gate'])
+        self.op(0x17,bytes([1])+bytes(5))
+        ordinary(2)
+        self.assertTrue(self.staging.state['gate'])
+        self.assertFalse(self.staging.ordinary_gate)
+        self.op(0x17,bytes([2])+bytes(5))
+        self.assertFalse(self.staging.state['gate'])
 
     def test_wrong_reference_crc_and_invalid_profile(self):
         first, last = file_packets(b'\xff'*499, 'XMODEM', ota101=True)

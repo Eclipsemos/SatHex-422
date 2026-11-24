@@ -33,7 +33,7 @@ class PayloadServiceTests(unittest.TestCase):
                 bad=dict(c);bad[field]=value;p.write_text(json.dumps(bad))
                 with self.subTest(field=field),self.assertRaises(ValueError):load_config(p)
 
-    def test_expired_snapshot_suppresses_only_telemetry(self):
+    def test_expired_snapshot_returns_invalid_measurements(self):
         from gs422.revised_runtime import Revised
         from gs422.ota_staging import Staging
         from gs422.core import Cache
@@ -45,7 +45,7 @@ class PayloadServiceTests(unittest.TestCase):
             r=Revised(s,Cache(100),{f.id:0 for f in tmg.FIELDS},version='vtest',clock=lambda:10)
             try:
                 r.set_telemetry_deadline(9)
-                self.assertEqual(r.feed_control(Message(0x11,1,0).wire()),b'')
+                self.assertEqual(tmg.unpack(Message.parse(Decoder().feed(r.feed_control(Message(0x11,1,0).wire()))[0]).body)['TMG034'],65535)
                 self.assertEqual(Decoder().feed(r.feed_control(control(0x30,0x56,bytes(6)))),[b'\x33\x56vtest\x00'])
                 r.set_telemetry_deadline(11)
                 self.assertTrue(r.feed_control(Message(0x11,2,0).wire()))

@@ -88,8 +88,9 @@ class ShortCommand(Message):
 
 
 class Controller:
-    def __init__(self, sensors, adapter=None, clock=time.monotonic, gate_handler=None):
+    def __init__(self, sensors, adapter=None, clock=time.monotonic, gate_handler=None, split_gate=False):
         self.sensors, self.adapter, self.clock = sensors, adapter or Adapter(), clock
+        self.split_gate = split_gate
         self.gate_handler = gate_handler
         self.started = clock()
         self.lock = threading.RLock()
@@ -208,7 +209,7 @@ class Controller:
                     self._result(message, 4, 5)
                 return None
             try:
-                action, parameters = validate(message)
+                action, parameters = validate(message, split_gate=self.split_gate)
             except CommandError as error:
                 self._result(message, 4, error.error)
                 return None

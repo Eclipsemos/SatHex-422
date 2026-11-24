@@ -18,12 +18,15 @@ def require(condition):
         raise CommandError(4)
 
 
-SHORT_CODES = frozenset((0x13, 0x40, 0x41, 0x42, 0x43, 0x51, 0x52, 0x83))
+SHORT_CODES = frozenset((0x17, 0x13, 0x40, 0x41, 0x42, 0x43, 0x51, 0x52, 0x83))
 REPLAY_TYPES = (0x11, 0x12, 0x13, 0x14, 0x20, 0x21, 0x22)
 
 
 def validate_short(code, words):
     require(len(words) == 6)
+    if code == 0x17:
+        require(words[0] in (1, 2) and not any(words[1:]))
+        return 'ordinary_gate', {'enabled': words[0] == 1}
     if code == 0x83:
         require(words[0] <= 15)
         return 'short_algorithm', {'task_id': words[0], 'words': tuple(words[1:])}
@@ -41,7 +44,7 @@ def validate_short(code, words):
             0x51: 'storage_stop', 0x52: 'short_status'}[code], {}
 
 
-def validate(message):
+def validate(message, *, split_gate=False):
     kind, code, body = message.kind, message.code, message.body
     if kind == 0x21:
         if code in (0x53, 0x54, 0x55, 0x56):
@@ -61,6 +64,8 @@ def validate(message):
             raise CommandError(3)
         require(len(body) == 6)
         if code == 0x17:
+            if split_gate:
+                return validate_short(code, body)
             require(body[0] in (0, 1, 2) and not any(body[1:]))
             return 'receive_gate', {'mode': body[0]}
         if code == 0x83:

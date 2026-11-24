@@ -9,17 +9,14 @@ MAX_PAYLOAD = 504
 HEADER = struct.Struct('>BBHB')
 
 
-def wire_sum(payload, ota101):
-    total = sum(payload)
-    if ota101 and payload[:1] in (b'\x30', b'\x31', b'\x32', b'\x33', b'\x3a'):
-        total += sum(len(payload).to_bytes(2, 'big'))
-    return total & 0xffff
+def wire_sum(payload):
+    return sum(payload) & 0xffff
 
 
 def encode(payload, *, ota101=False):
     if len(payload) > MAX_PAYLOAD:
         raise ValueError('payload exceeds 504 bytes')
-    return HEAD + struct.pack('>H', len(payload)) + payload + struct.pack('>H', wire_sum(payload, ota101)) + TAIL
+    return HEAD + struct.pack('>H', len(payload)) + payload + struct.pack('>H', wire_sum(payload)) + TAIL
 
 
 @dataclass(frozen=True)
@@ -101,7 +98,7 @@ class Decoder:
                 if self.buffer[size - 2:size] != TAIL:
                     self.format_errors += 1
                     del self.buffer[:1]
-                elif wire_sum(body, self.ota101) != checksum:
+                elif wire_sum(body) != checksum:
                     self.checksum_errors += 1
                     del self.buffer[:1]
                 else:

@@ -111,15 +111,15 @@ def main():
             assert r.drain_replies() == reply(code,result,ota101=True)
 
         def version():
-            frame = r.feed_control(bytes.fromhex('eb9000083056000000000000008e09d7'))
+            frame = r.feed_control(bytes.fromhex('eb9000083056000000000000008609d7'))
             return Decoder(ota101=True).feed(frame)[0][2:-1].decode()
 
         def state(expected):
-            assert Decoder(ota101=True).feed(r.feed_control(bytes.fromhex('eb9000023214004809d7')))[0] == bytes((0x33,expected))
+            assert Decoder(ota101=True).feed(r.feed_control(bytes.fromhex('eb9000023214004609d7')))[0] == bytes((0x33,expected))
 
         def old(data):
-            command(0x17,bytes(6))
-            command(0x17,bytes.fromhex('020000000000'))
+            ota(0x17,bytes.fromhex('020000000000'))
+            ota(0x17,bytes.fromhex('010000000000'))
             n = (len(data)+511)//512
             for idx in reversed(range(n)):
                 block = data[512*idx:512*(idx+1)]
