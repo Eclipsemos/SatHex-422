@@ -60,6 +60,9 @@ class DemoDocker:
                           '--security-opt', 'no-new-privileges', '--memory', '64m', '--pids-limit', '16',
                           '--user', '65534:65534', *(['--device',device] if device else []),
                           '--entrypoint', '/sample', image, mode, *(str(word) for word in words))
+        return self._start_created(cid)
+
+    def _start_created(self, cid):
         self.owned.append(cid)
         try:
             self.runner('start', cid)
@@ -68,6 +71,30 @@ class DemoDocker:
             self.owned.remove(cid)
             raise
         return cid
+
+    def create_capture_job(self, profile, task_id, words):
+        # The decoder comes from the pinned preloaded image. Its application
+        # code/config volume belongs to the currently health-checked OTA slot.
+        if not self.active or self.slots[self.active]['image_id'] != profile['release_image']:
+            raise CommandError(7)
+        if not self._state(self.software)['Running']:
+            raise CommandError(7)
+        output = self.root / 'decode-results' / uuid.uuid4().hex
+        output.mkdir(parents=True,mode=0o700)
+        import os
+        os.chown(output,65534,65534)
+        cid = self.runner('create','--name',self.prefix+'-'+output.name[:10],
+                          '--label','sathex.demo='+self.prefix,'--label','sathex.capture_job=1',
+                          '--network','none','--read-only','--cap-drop','ALL',
+                          '--security-opt','no-new-privileges','--memory','4g','--pids-limit','256',
+                          '--user','65534:65534','--tmpfs','/tmp:rw,nosuid,nodev,size=256m',
+                          '--env','HOME=/tmp','--env','PYTHONDONTWRITEBYTECODE=1',
+                          '--volumes-from',self.software+':ro',
+                          '--mount','type=bind,src='+profile['capture']+',dst=/data/capture,readonly',
+                          '--mount','type=bind,src='+str(output)+',dst=/data/output',
+                          '--entrypoint','python3',profile['decoder_image'],'/sathex/release/job.py',
+                          str(task_id),*(str(w) for w in words))
+        return self._start_created(cid)
 
     def _state(self, cid):
         if cid not in self.owned:

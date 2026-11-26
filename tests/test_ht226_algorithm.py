@@ -58,6 +58,24 @@ class AlgorithmTests(unittest.TestCase):
         raw = self.files.db.execute('select body from frames where file=?',(detail['file_id'],)).fetchone()[0]
         self.assertEqual(json.loads(raw)['words'],words[1:])
 
+    def test_capture_release_selects_pinned_decoder_and_rollback_restores_sample(self):
+        profile = {'decoder_image':'decoder','release_image':'release','capture':'/bench/iq'}
+        self.jobs.registry['1']['capture_job'] = profile
+        self.sw.active = 1
+        self.sw.slots = {1:{'image_id':'release'}}
+        self.sw.create_capture_job.return_value = 'fixture-cid'
+        with self.assertRaises(CommandError):
+            self.jobs.start_short(1,(1,0,0,0,0))
+        done = self.jobs.start_short(1,(0,)*5)
+        self.sw.create_capture_job.assert_called_once_with(profile,1,(0,)*5)
+        self.sw._state.return_value = {'Running':False,'ExitCode':0}
+        self.sw.runner.return_value = '{"value":50}'
+        self.assertEqual(self.jobs.telemetry()['TMG032'],3)
+        self.assertEqual(done.result()[1]['value'],50)
+        self.sw.slots[1] = {'image_id':'previous-release'}
+        self.jobs.start_short(1,(1,2,3,4,5))
+        self.sw._create.assert_called_once_with('pinned','algorithm',words=(1,2,3,4,5))
+
     def test_registered_app_and_parameter_bounds(self):
         for i in range(5):
             for value in range(256):

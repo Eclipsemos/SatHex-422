@@ -56,8 +56,16 @@ def load_config(path):
         if not Path(c.get('ssd_root') or '').is_absolute() or not re.fullmatch(r'[a-zA-Z0-9-]+', c.get('ssd_uuid') or ''):
             raise ValueError('SSD requires an absolute mount and filesystem UUID')
     for key, entry in c.get('algorithms', {'1':{'cpu_image':'active'}}).items():
-        if key not in {str(i) for i in range(16)} or set(entry)-{'cpu_image','device','npu_image','ht226_image'}:
+        if key not in {str(i) for i in range(16)} or set(entry)-{'cpu_image','device','npu_image','ht226_image','capture_job'}:
             raise ValueError('invalid algorithm registration')
+        if 'capture_job' in entry:
+            profile = entry['capture_job']
+            if key not in ('0','1') or set(profile) != {'capture','release_image','decoder_image'}:
+                raise ValueError('invalid capture job')
+            if not all(re.fullmatch('sha256:[0-9a-f]{64}',profile[k]) for k in ('release_image','decoder_image')):
+                raise ValueError('capture job requires immutable image IDs')
+            if not Path(profile['capture']).is_absolute() or any(c in profile['capture'] for c in ',\r\n'):
+                raise ValueError('invalid capture mount')
         if 'ht226_image' in entry and not re.fullmatch('sha256:[0-9a-f]{64}',entry['ht226_image']):
             raise ValueError('HT226 requires a pinned algorithm image ID')
         if entry.get('cpu_image')!='active' and not re.fullmatch('sha256:[0-9a-f]{64}',entry.get('cpu_image','')):

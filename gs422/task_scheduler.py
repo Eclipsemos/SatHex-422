@@ -22,6 +22,7 @@ class Job:
     device: str | None
     cid: str | None = None
     completion: Future | None = None
+    capture_profile: dict | None = None
 
 
 class Scheduler:
@@ -37,7 +38,8 @@ class Scheduler:
         # Interrupted jobs are never adopted without a task ID, or replayed.
         for cid in list(software.owned):
             info = software._inspect_owned(cid)
-            if (info['Config'].get('Cmd') or [])[:1] == ['algorithm']:
+            if ((info['Config'].get('Cmd') or [])[:1] == ['algorithm'] or
+                    (info['Config'].get('Labels') or {}).get('sathex.capture_job') == '1'):
                 self._retire(cid)
 
     def _retire(self, cid):
@@ -47,17 +49,30 @@ class Scheduler:
             self.software.task = None
         self.software._save('idle')
 
+    def _active_capture(self, entry):
+        profile = entry.get('capture_job')
+        if profile and self.software.active and self.software.slots[self.software.active]['image_id'] == profile['release_image']:
+            return profile
+        return None
+
     def start_short(self, task_id, words):
         with self.lock:
             self._refresh()
-            image = self.registry.get(str(task_id), {}).get('ht226_image')
+            entry = self.registry.get(str(task_id), {})
+            profile = self._active_capture(entry)
+            image = profile['decoder_image'] if profile else entry.get('ht226_image')
             if image is None or self.result_files is None:
                 raise CommandError(7)
             if self.pending or self.running:
                 raise CommandError(6)
-            cid = self.software._create(image, 'algorithm', words=words)
+            if profile:
+                if any(words):
+                    raise CommandError(4)  # Packaged captures have fixed decoder settings.
+                cid = self.software.create_capture_job(profile,task_id,words)
+            else:
+                cid = self.software._create(image, 'algorithm', words=words)
             completion = Future()
-            self.running[task_id] = Job(task_id, 0, True, image, None, cid, completion)
+            self.running[task_id] = Job(task_id, 0, True, image, None, cid, completion, profile)
             self.states[task_id] = 1
             self.configured = task_id
             return completion
@@ -86,9 +101,10 @@ class Scheduler:
         for ident, job in list(self.running.items()):
             state = self.software._state(job.cid)
             if not state['Running']:
-                if job.completion is not None:
+                if job.completion is not None or job.capture_profile:
                     error, detail = self._short_result(job, state['ExitCode'])
-                    job.completion.set_result((error, detail))
+                    if job.completion is not None:
+                        job.completion.set_result((error, detail))
                 else:
                     error = state['ExitCode']
                 self.states[ident] = 3 if error == 0 else 2
@@ -104,7 +120,10 @@ class Scheduler:
                 break
             self.pending.pop(0)
             try:
-                job.cid = self.software._create(job.image, 'algorithm', device=job.device)
+                if job.capture_profile:
+                    job.cid = self.software.create_capture_job(job.capture_profile,job.task_id,(0,)*5)
+                else:
+                    job.cid = self.software._create(job.image, 'algorithm', device=job.device)
             except Exception:
                 self.states[job.task_id] = 2
                 self.completed = job.task_id
@@ -133,9 +152,14 @@ class Scheduler:
                 image = entry.get('npu_image') if params['npu'] else entry['cpu_image']
                 if image == 'active':
                     image = self.software.slots[self.software.active]['image_id']
-                if not image or image not in {v['image_id'] for v in self.software.catalog.values()}:
+                profile = self._active_capture(entry)
+                if profile:
+                    if params['npu'] or self.result_files is None:
+                        raise CommandError(7)
+                    image = profile['decoder_image']
+                elif not image or image not in {v['image_id'] for v in self.software.catalog.values()}:
                     raise CommandError(7)
-                self.pending.append(Job(ident, params['priority'], params['mode']==1, image, device))
+                self.pending.append(Job(ident, params['priority'], params['mode']==1, image, device,capture_profile=profile))
                 self._dispatch()
                 self.configured = ident
             elif action in ('task_stop','task_pause'):
