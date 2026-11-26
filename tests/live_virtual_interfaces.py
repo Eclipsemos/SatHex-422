@@ -122,7 +122,7 @@ def main():
             path = root/key
             path.write_text(text)
             return str(path)
-        sensors = Measurements(dict(soc_temp_path=sensor('soc','48000'),smi=str(smi),card=0,
+        sensors = Measurements(dict(npu_temp_path=sensor('npu','48000'),smi=str(smi),card=0,
                                     power=dict(path=sensor('power','10000000'),divisor=1000000,verified=True),
                                     voltage=dict(path=sensor('voltage','12531'),divisor=1000,verified=True)))
         rt = Revised(stage,Cache(10),dict.fromkeys(tmg.BY_ID,0),version='bench',ota101=True,
@@ -136,14 +136,14 @@ def main():
         stack.callback(transport.close)
         rt.start()
         link = Link(cm,transport,rt,backend,sensors)
-        fields = ('TMG005','TMG007','TMG034')
+        fields = ('TMG005','TMG006','TMG007','TMG034')
         present = [link.tm()[k] for k in fields]
-        assert present == [1000,52,1253]
+        assert present == [1000,52,48,1253]
         smi.unlink()
-        for name in ('power','voltage'):
+        for name in ('power','voltage','npu'):
             (root/name).unlink()
         absent = [link.tm()[k] for k in fields]
-        assert absent == [65535,255,65535]
+        assert absent == [65535,255,255,65535]
         record(fields, injected_raw=present, missing_raw=absent)
 
         for n in range(6):

@@ -1,5 +1,4 @@
 {
-  "soc_temp_path": "/sys/class/thermal/thermal_zone0/temp",
   "smi": "/usr/local/houmo-sdk/tools/hm_smi/hm_smi",
   "card": 0,
   "voltage": null,

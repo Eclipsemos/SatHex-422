@@ -1,4 +1,4 @@
-"""Measured snapshot producer. Houmo NPU only; no RK-NPU substitution.
+"""Measured snapshot producer. External Houmo card and RK3588 NPU have separate sensors.
 
 Voltage/power paths and divisors require explicit verified configuration. Without
 them the approved invalid marker is published. No assumed nominal voltage or
@@ -17,12 +17,13 @@ from . import tmg
 
 class Measurements:
     def __init__(self, config):
-        required={'soc_temp_path','smi','card','voltage','power'}
-        if set(config)-{'utc_verified'} != required:
+        required={'smi','card','voltage','power'}
+        if set(config)-{'utc_verified','soc_temp_path','npu_temp_path'} != required:
             raise ValueError('invalid measurement configuration')
         if not isinstance(config['card'],int) or isinstance(config['card'],bool) or config['card']<0:
             raise ValueError('invalid Houmo card index')
-        for name in ('soc_temp_path','smi'):
+        for name in ('smi','npu_temp_path','soc_temp_path'):
+            if name not in config:continue
             if not isinstance(config[name],str) or not Path(config[name]).is_absolute():raise ValueError('absolute path required')
         for name in ('voltage','power'):
             source=config[name]
@@ -43,10 +44,24 @@ class Measurements:
             return tmg.raw_value(field,float(text.strip())/divisor)
         except (OSError,ValueError,OverflowError):return tmg.INVALID[field]
 
+    def _npu_temp(self):
+        path = self.config.get('npu_temp_path')
+        if path is None:
+            # Zone numbers can change across kernels. Older configurations only
+            # specify the SoC sensor, which does not measure the NPU.
+            for zone in Path('/sys/class/thermal').glob('thermal_zone*'):
+                try:
+                    if (zone/'type').read_text().strip() == 'npu-thermal':
+                        path = zone/'temp'
+                        break
+                except OSError:
+                    continue
+        return self._scaled(path,1000,'TMG007') if path else tmg.INVALID['TMG007']
+
     def sample(self):
         c=self.config
         values=dict(tmg.INVALID)
-        values['TMG006']=self._scaled(c['soc_temp_path'],1000,'TMG006')
+        values['TMG007']=self._npu_temp()
         for name,field in (('voltage','TMG034'),('power','TMG005')):
             if c[name] is not None:
                 values[field]=self._scaled(c[name]['path'],c[name]['divisor'],field)
@@ -55,7 +70,7 @@ class Measurements:
                              stderr=subprocess.DEVNULL,timeout=2,text=True)
             if p.returncode==0 and len(p.stdout)<=262144:
                 temperature,_=parse_smi(p.stdout,c['card'])
-                if temperature is not None:values['TMG007']=tmg.raw_value('TMG007',temperature/100)
+                if temperature is not None:values['TMG006']=tmg.raw_value('TMG006',temperature/100)
         except (OSError,ValueError,subprocess.SubprocessError):pass
         return {'source':'measured','monotonic':time.monotonic(),'values':values}
 
