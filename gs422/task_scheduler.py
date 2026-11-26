@@ -51,8 +51,12 @@ class Scheduler:
 
     def _active_capture(self, entry):
         profile = entry.get('capture_job')
-        if profile and self.software.active and self.software.slots[self.software.active]['image_id'] == profile['release_image']:
-            return profile
+        if profile and self.software.active:
+            active_image = self.software.slots[self.software.active]['image_id']
+            if active_image == profile['release_image']:
+                return profile
+            if active_image in profile.get('release_copies', ()):
+                return dict(profile, release_image=active_image)
         return None
 
     def start_short(self, task_id, words):

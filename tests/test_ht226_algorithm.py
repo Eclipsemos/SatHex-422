@@ -76,6 +76,15 @@ class AlgorithmTests(unittest.TestCase):
         self.jobs.start_short(1,(1,2,3,4,5))
         self.sw._create.assert_called_once_with('pinned','algorithm',words=(1,2,3,4,5))
 
+    def test_copy_and_original_are_independently_selectable(self):
+        profile = {'release_image':'old','release_copies':['new'],'decoder_image':'shared'}
+        self.sw.active = 1
+        for ident in ('old','new','unregistered'):
+            self.sw.slots = {1:{'image_id':ident}}
+            selected = self.jobs._active_capture({'capture_job':profile})
+            self.assertEqual(selected and selected['release_image'], None if ident=='unregistered' else ident)
+        self.assertEqual(profile['release_image'],'old')
+
     def test_registered_app_and_parameter_bounds(self):
         for i in range(5):
             for value in range(256):

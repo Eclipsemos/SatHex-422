@@ -60,10 +60,13 @@ def load_config(path):
             raise ValueError('invalid algorithm registration')
         if 'capture_job' in entry:
             profile = entry['capture_job']
-            if key not in ('0','1') or set(profile) != {'capture','release_image','decoder_image'}:
+            if key not in ('0','1') or set(profile)-{'release_copies'} != {'capture','release_image','decoder_image'}:
                 raise ValueError('invalid capture job')
             if not all(re.fullmatch('sha256:[0-9a-f]{64}',profile[k]) for k in ('release_image','decoder_image')):
                 raise ValueError('capture job requires immutable image IDs')
+            copies = profile.get('release_copies', [])
+            if type(copies) is not list or not all(isinstance(i,str) and re.fullmatch('sha256:[0-9a-f]{64}',i) for i in copies):
+                raise ValueError('capture release copies require immutable image IDs')
             if not Path(profile['capture']).is_absolute() or any(c in profile['capture'] for c in ',\r\n'):
                 raise ValueError('invalid capture mount')
         if 'ht226_image' in entry and not re.fullmatch('sha256:[0-9a-f]{64}',entry['ht226_image']):
