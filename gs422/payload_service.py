@@ -137,7 +137,8 @@ def serve(c):
         staging.crc_config_valid = c.get('ota_crc', V101_CRC) == V101_CRC
         legacy=LegacyUpload(root/'legacy')
         runtime=Revised(staging,Cache(5000),values,version=software.version(),adapter=backend,
-                        software_backend=backend,algorithms_enabled=True,legacy_upload=legacy,ota101=True)
+                        software_backend=backend,algorithms_enabled=True,legacy_upload=legacy,ota101=True,
+                        elapsed_clock=lambda: time.clock_gettime(time.CLOCK_BOOTTIME))
         runtime.set_telemetry_deadline(deadline)
         def collect():
             previous=None

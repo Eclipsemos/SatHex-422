@@ -52,7 +52,7 @@ class Revised:
     staging_fields = frozenset(f'TMG{i:03}' for i in range(8, 15))
 
     def __init__(self, staging, sensors, raw_telemetry, *, version, adapter=None, clock=time.monotonic,
-                 software_backend=None, algorithms_enabled=False, legacy_upload=None, ota101=False):
+                 software_backend=None, algorithms_enabled=False, legacy_upload=None, ota101=False, elapsed_clock=None):
         self.ota101 = ota101
         if staging.profile != ('XMODEM' if ota101 else 'CCITT-FALSE'):
             raise ValueError('file CRC profile does not match selected wire revision')
@@ -64,7 +64,8 @@ class Revised:
         self.upload_profile = staging.state.get('upload_profile', 'modern')
         self.algorithms_enabled = algorithms_enabled
         self.raw = dict(raw_telemetry)
-        self.last_broadcast_utc = 0
+        self.elapsed_clock = clock if elapsed_clock is None else elapsed_clock
+        self.utc_anchor = None  # (broadcast Unix seconds, local reception time)
         self.erase_status = (0 if self.upload_profile == 'legacy' and legacy_upload is not None
                             and staging.state.get('loaded_legacy') == legacy_upload.state['file_id'] else None)
         self.started = clock()
@@ -202,7 +203,11 @@ class Revised:
             values = dict(self.raw)
             if self.telemetry_deadline is not None and self.clock() >= self.telemetry_deadline:
                 values.update(tmg.INVALID)
-            values.update(TMG004=self.last_broadcast_utc,
+            utc = 0
+            if self.utc_anchor is not None:
+                seconds, received_at = self.utc_anchor
+                utc = (seconds + int(self.elapsed_clock() - received_at)) & 0xffffffff
+            values.update(TMG004=utc,
                           TMG001=self.correct & 255, TMG002=self.incorrect & 255,
                           TMG003=self.bus_errors & 255,
                           TMG040=int(max(0, self.clock() - self.started)) & 255)
@@ -234,7 +239,7 @@ class Revised:
                 # Proposed broadcast subtype 01. No sequence or acknowledgement.
                 if len(payload) == 6 and payload[1] == 1:
                     with self.lock:
-                        self.last_broadcast_utc = int.from_bytes(payload[2:], 'big')
+                        self.utc_anchor = (int.from_bytes(payload[2:], 'big'), self.elapsed_clock())
                 else:
                     self.incorrect += 1
                 continue

@@ -83,24 +83,38 @@ class RevisedRuntimeTests(unittest.TestCase):
         self.assertEqual(self.drain_work(), [b'\x31\x55\xff'])
         self.assertNotIn(self.telemetry()['TMG014'], (0x11, 0x31))
 
-    def test_time_is_last_valid_broadcast_in_receive_order(self):
+    def test_time_advances_from_last_complete_valid_broadcast(self):
+        self.now[0] = 100
         self.assertEqual(self.telemetry()['TMG004'], 0)
         def broadcast(seconds):
             return encode(b'\xcc\x01' + seconds.to_bytes(4, 'big'))
         for stamp in (987654, 123456):
             frame = broadcast(stamp)
             self.assertEqual(self.runtime.feed_control(frame[:7]), b'')
+            self.now[0] += 4
             self.assertEqual(self.runtime.feed_control(frame[7:]), b'')
-            self.now[0] += 20
-            self.runtime.update_telemetry(self.values)
+            self.now[0] += 0.75
             self.assertEqual(self.telemetry()['TMG004'], stamp)
+            self.now[0] += 19.25
+            self.runtime.update_telemetry(self.values)
+            self.assertEqual(self.telemetry()['TMG004'], stamp + 20)
         damaged = bytearray(broadcast(7))
         damaged[-4] ^= 1
         for invalid in (damaged, encode(b'\xcc\x01'), encode(b'\xcc\x02'+bytes(4))):
             self.runtime.feed_control(invalid)
-            self.assertEqual(self.telemetry()['TMG004'], 123456)
+            self.assertEqual(self.telemetry()['TMG004'], 123476)
         self.runtime.feed_upload(broadcast(9))
-        self.assertEqual(self.telemetry()['TMG004'], 123456)
+        self.assertEqual(self.telemetry()['TMG004'], 123476)
+
+    def test_utc_zero_rollover_and_repeated_broadcast_reset_timer(self):
+        for stamp in (0xffffffff, 0, 17, 17):
+            self.runtime.feed_control(encode(bytes([0xcc,1])+stamp.to_bytes(4,'big')))
+            self.now[0] += 1.25
+            expected = (stamp + 1) & 0xffffffff
+            for request, header_size in ((b'\x11',1),(b'\x11\x00',2)):
+                packet, = Decoder().feed(self.runtime.feed_control(encode(request)))
+                self.assertEqual(tmg.unpack(packet[header_size:])['TMG004'], expected)
+            self.assertEqual(self.telemetry()['TMG004'], expected)
 
     def test_erase_status_visible_through_both_routes(self):
         for kind, result, final in ((0x21, 0, 0x11), (0x30, 0, 0x11), (0x30, 255, 0x40)):
