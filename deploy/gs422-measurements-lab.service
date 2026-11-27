@@ -1,0 +1,19 @@
+[Unit]
+Description=SatHex configured measurement snapshot producer
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=5
+ExecStart=/usr/bin/gs422-measurements-lab --config /etc/gs422-measurements-lab.json --output /run/sathex-measurements.json
+User=root
+UMask=0077
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/run
+PrivateTmp=true
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+[Install]
+WantedBy=multi-user.target

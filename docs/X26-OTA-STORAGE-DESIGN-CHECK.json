@@ -1,0 +1,11 @@
+{
+  "status": "DESIGN_SCOPE_CHECK_ONLY_NOT_IMPLEMENTATION_ACCEPTANCE",
+  "scope": "payload_software",
+  "partition_changes": false,
+  "boot_components_reserved": [
+    1,
+    2
+  ],
+  "slots_are_directories": true,
+  "replaces": "previous system A/B partition arithmetic; no longer applicable"
+}

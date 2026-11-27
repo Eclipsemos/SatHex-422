@@ -1,5 +1,58 @@
 # SatHex-422：自主串口服务 gs422
 
+[OTA V1.0.2 附录 A 校核与 499 B 文件联调向量](docs/PAYLOAD-CONTROL-20261123.md#v102-附录-a-校核2026-11-24)。
+
+当前 X26 使用 lab9。[星务遥测、SUM16、17H 分流与输入电压联试修订](docs/PAYLOAD-CONTROL-20261123.md)。
+
+X26 lab8 已完成 K1101 普通文件上注、暂停续传与校验后落盘。[收发流程和板上验收](docs/PAYLOAD-CONTROL-20261123.md#lab8-普通文件上注k1101)。
+
+X26 lab7 支持 HT226 Z83 的五个 APP 参数。板上已用 APP1 CPU 样例通过 COM3 验证运行、完成以及结果文件回读。[算法接口与验收](docs/HT226-SHORT-COMMANDS.md#z83-启动算法)。
+
+X26 lab6 新增 HT226 短指令的主备回放、分类清理及固存停止／查询。[参数、执行结果与联试条件](docs/HT226-SHORT-COMMANDS.md)。
+
+X26 lab5 采用 OTA V1.0.1。[重构线格式、CRC 联调向量和三条遥控的验收](docs/PAYLOAD-CONTROL-20261123.md)。下列旧版本记录保留各轮测试时的条件。
+
+**当前主板运行统一样例二进制协议115200/8N1，原AT服务已停用并保留回退。** [开机恢复及连续查询验收](docs/SAMPLE-AUTOSTART-ACCEPTANCE.md)已通过：实际K1109重启后自启、RTC时间保持、120帧物理查询全部正确；全硬件目标仍未完成。
+
+[已配置的统一样例服务](docs/CONFIGURED-SAMPLE-SERVICE.md)已在主板安装并保存软件目录/文件驱动配置，真实COM3执行20次控制操作通过，164项单元测试通过。外设为用户确认的文件样例，实验服务测试后停止，正式AT仍运行。
+
+[独立实验包](docs/LAB-PACKAGE-INSTALLATION.md)已在X26安装并验证，可与gs422 2.6.0共存；新服务默认禁用，外设驱动与可信软件目录尚未配置完整。
+
+[分段流与32H进度查询](docs/SEGMENTED-PROGRESS-PROFILE.md)已完成项目定义和主板回归，162项测试通过；真实COM3进度查询通过，物理上传仍未完成。
+
+[软件包索引验收](docs/PACKAGE-INDEX-ACCEPTANCE.md)：历史索引、初始F0恢复和重复请求保护已通过主板真实Docker测试，158项单元测试通过；现场catalog及全部硬件配置仍未完成。
+
+优先查看[当前全目标验收清单](docs/CURRENT-ACCEPTANCE.md)：23条遥控与44项遥测逐项区分样例、物理证据和配置缺项。153项板上测试通过不等于所有现场配置完成。
+
+[真实遥测与缺测编码](docs/MEASURED-TELEMETRY-ACCEPTANCE.md)：用户确认后摩温度对象及FF/FFFF无效码；新版74B帧已在真实COM3读回，151项板上测试通过。无效标记正确不代表未安装传感器已完成测量验收。
+
+[后台服务配置与生命周期](docs/PAYLOAD-DAEMON-CONFIGURATION.md)已通过主板独立进程启停/续传/过期测量保护验证，147项单元测试通过；真实外设和测量源仍未全部配置。
+
+[统一执行器样例验收](docs/UNIFIED-PAYLOAD-ACCEPTANCE.md)：主板144项单元测试通过，22项非重启遥控在同一实例执行业务成功。正式现场配置和真实外设验收仍未完成。
+
+[软件持久化与候选清理](docs/DURABLE-SOFTWARE-ACCEPTANCE.md)已完成真实Docker进程中断恢复测试，主板140项单元测试通过；统一部署与全部硬件验收仍进行中。
+
+[K1109整板重启](docs/K1109-REBOOT-ACCEPTANCE.md)已通过真实COM3验收，重启后IP、Docker、SSH、AT服务恢复；板上135项单元测试通过。全部业务配置目标仍未完成。
+
+新增[旧D0351显式接收配置](docs/LEGACY-D0351-PROFILE.md)，主板131项单元测试及12项文件业务路径通过；收到文件不等于激活软件，全目标仍进行中。
+
+[全指令验收推进](docs/GOAL-PROGRESS-20261120.md)：主板127项单元测试通过，新增11项文件业务/K表OTA执行路径验证；完整配置与物理外设验收仍在进行。
+
+最新[Docker样例逐项验收](docs/DEMO-ACCEPTANCE-20261120.md)：板上116项单元测试通过，真实样例软件上注/v1→v2升级/失败回退、算法生命周期及物理COM3容器控制已验证。该后端为显式LAB配置，生产算法仍未注册，全表尚未完成。
+
+用户明确上注更新对象为载荷软件。[软件主备目录与回退设计](docs/X26-OTA-STORAGE-DESIGN.md)已替代此前系统A/B提案，不升级Ubuntu、不重新分区；软件激活后端尚未实现。
+
+20261119新遥控/遥测与OTA资料的[设计入口及待确认冲突](docs/REVISION-20261119.md)、
+[44字段布局](docs/TMG-LAYOUT-20261119.md)、[来源清单](docs/spec-20261119.json)。
+新增OTA编解码与暂存为离线参考组件，尚未接入现场UART；Flash后端与全功能实机验收尚未完成。
+本次[阶段验收记录](docs/ACCEPTANCE-20261119.md)：Linux 112项测试通过，按用户确认的TYPE分流和CRC-16/CCITT-FALSE设计；[接口映射及双UART接入层](docs/X26-INTERFACE-MAPPING.md)使用ttyS6控制、ttyS8只收。未接入业务单独列出，整体功能验收尚未通过。
+
+本开发分支包含试验星01二进制协议原型：[帧分配草案](docs/SATELLITE-FRAMES.md)、
+[业务执行器接口与未接入范围](docs/SPACE-ADAPTERS.md)、[联调记录](docs/SPACE-VALIDATION.md)。
+原型为独立入口，不默认切换现有AT服务；业务执行器尚待接入，不能作为完整载荷功能验收。
+算法相关五项映射按用户要求留空；其余业务按[非算法业务设计](docs/PAYLOAD-SERVICES-DESIGN.md)分阶段实现。
+X26现有Docker故障见[内核检查结果](docs/DOCKER-X26-DIAGNOSIS.md)。
+
 独立实现 `shanhe-serial 0.2.2` 的串口功能：STA、IP1、IP2、WIFI 查询及配网。
 另支持 `AT+CPU` / `AT+CPU?`：后台约 1 秒采样的整机/各核使用率、IO 等待、系统负载、
 各核心组频率、SoC 温度、在线核心数和实际采样窗口。

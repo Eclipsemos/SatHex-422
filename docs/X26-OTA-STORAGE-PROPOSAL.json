@@ -1,0 +1,38 @@
+{
+  "schema": 2,
+  "status": "SOFTWARE_ONLY_PROPOSAL_NOT_APPLIED",
+  "apply_enabled": false,
+  "scope": "payload_software",
+  "repartition": false,
+  "os_update": false,
+  "reboot_board_on_apply": false,
+  "base_directory": "/var/lib/sathex",
+  "slots": {
+    "A": {
+      "region": 1,
+      "component": 3,
+      "path": "/var/lib/sathex/software/slots/A"
+    },
+    "B": {
+      "region": 2,
+      "component": 4,
+      "path": "/var/lib/sathex/software/slots/B"
+    }
+  },
+  "reserved_components": [
+    1,
+    2
+  ],
+  "regions_disabled": [
+    3,
+    4
+  ],
+  "active_pointer": "/var/lib/sathex/software/current",
+  "max_package_bytes": 268435456,
+  "max_unpacked_slot_bytes": 1073741824,
+  "history_budget_bytes": 1073741824,
+  "staging_reserve_bytes": 1073741824,
+  "state_logs_budget_bytes": 268435456,
+  "minimum_system_free_bytes": 4294967296,
+  "health_timeout_seconds": 60
+}
