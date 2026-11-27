@@ -10,6 +10,11 @@ import os
 from pathlib import Path
 import tempfile
 import shutil
+import sqlite3
+import subprocess
+import tarfile
+import zipfile
+from .signed_release import SignedReleases
 from .demo_docker import DemoDocker
 from .space_commands import CommandError
 from .package_index import PackageIndex, ArchivedInput
@@ -19,22 +24,31 @@ class DurableDemo(DemoDocker):
     FIELDS=('prefix','owned','slots','active','release','software','task','task_id',
             'latest_completed','last_task_state','retained')
 
-    def __init__(self,root,catalog,runner=None):
+    def __init__(self,root,catalog,runner=None,*,publisher_key=None,profiles=None):
         import fcntl
         root=Path(root);root.mkdir(parents=True,exist_ok=True)
         self.owner=(root/'owner.lock').open('a')
         try:
             fcntl.flock(self.owner,fcntl.LOCK_EX|fcntl.LOCK_NB)
-            super().__init__(root,catalog,runner)
+            self.static_digests = frozenset(catalog)
+            super().__init__(root,dict(catalog),runner)
+            self.signed = None
+            if publisher_key is not None:
+                self.signed = SignedReleases(root,publisher_key,profiles or {},self.catalog)
+            self.signed_bindings = self.signed.bindings if self.signed else {}
             self.state_path=root/'state.json'
-            self.package_index=PackageIndex(root,catalog)
+            self.package_index=PackageIndex(root,self.catalog)
             if self.state_path.exists():
                 record=json.loads(self.state_path.read_text())
                 if record.get('schema')!=1:raise ValueError('invalid state schema')
                 self._restore(record['committed'])
                 self._recover(record['phase'])
+                if self.active and self.slots[self.active]['image_id'] in self.signed_bindings:
+                    digest=self.archived_package(self.slots[self.active]).stem
+                    self.package_index.register_history(digest)
             self._save('idle')
         except BaseException:
+            if getattr(self,"signed",None):self.signed.db.close()
             self.owner.close()
             raise
 
@@ -107,6 +121,26 @@ class DurableDemo(DemoDocker):
                 self.runner('start',self.software)
                 self._health(self.software,self.release)
 
+    def admit_upload(self, staging):
+        # Raw legacy packages keep their existing manually provisioned trust path.
+        with self.lock, staging.lock:
+            first=staging.db.execute('SELECT data FROM packets WHERE seq=0').fetchone()
+            if not first or first[0][6:10] != b'PK\x03\x04':
+                return
+            if not self.signed:
+                raise CommandError(7)
+            try:
+                with tempfile.TemporaryDirectory(dir=self.root) as folder:
+                    work=Path(folder)
+                    bundle=work/'upload.satpkg'
+                    staging.export_verified(bundle)
+                    digest=self.signed.admit(bundle,work,staging.capacity,self.runner)
+                staging.state['signed_digest']=digest
+                staging._save()
+            except (KeyError,TypeError,ValueError,OSError,zipfile.BadZipFile,tarfile.TarError,
+                    sqlite3.Error,subprocess.SubprocessError) as error:
+                raise CommandError(7) from error
+
     def ota(self,action,args,staging):
         with self.lock:
             if self.task and self._state(self.task)['Running']:
@@ -150,6 +184,21 @@ class DurableDemo(DemoDocker):
                 return 0
             if action=='erase' and args.get('scope')==0:
                 return self._erase_installed(args['region'])
+            source_stage = staging
+            if action=='load' and staging.state.get('status')==0x23 and staging.state.get('signed_digest'):
+                digest=staging.state['signed_digest']
+                path=self.package_index.resolve_digest(digest)
+                entry=self.catalog[digest]
+                if self.active and self.slots[self.active]==entry and self.software:
+                    state=self._state(self.software)
+                    if state['Running'] and not state.get('Paused'):
+                        staging.state.update(status=0x31,loaded_file=staging.state['file_id'],loaded_image=entry['image_id'])
+                        staging._save()
+                        return 0
+                history=self.package_index.entries
+                if digest not in history.values() and all(str(i) in history for i in range(1,129)):
+                    return 0xff
+                staging=ArchivedInput(path,staging.state['request'][1],staging)
             if action=='load' and staging.state.get('status')==0x23:
                 request=staging.state.get('request')
                 if request and (request[0],request[1]) in ((3,1),(4,2)) and request[1]!=self.active:
@@ -165,9 +214,9 @@ class DurableDemo(DemoDocker):
                 # Register only a health-confirmed release, not every uploaded tar.
                 digest=self.archived_package(self.slots[self.active]).stem
                 self.package_index.register_history(digest)
-                if 'file_id' in staging.state:
-                    staging.state.update(loaded_file=staging.state['file_id'], loaded_image=self.slots[self.active]['image_id'])
-                    staging._save()
+                if 'file_id' in source_stage.state:
+                    source_stage.state.update(loaded_file=source_stage.state['file_id'], loaded_image=self.slots[self.active]['image_id'])
+                    source_stage._save()
             return result
 
     def _cache_candidate(self,staging,region):
@@ -180,7 +229,8 @@ class DurableDemo(DemoDocker):
             h=hashlib.sha256()
             with temp.open('rb') as f:
                 for block in iter(lambda:f.read(1024*1024),b''):h.update(block)
-            if h.hexdigest() not in self.catalog:raise CommandError(7)
+            allowed = self.catalog if isinstance(staging,ArchivedInput) else self.static_digests
+            if h.hexdigest() not in allowed:raise CommandError(7)
             archive_dir=self.root/'packages'
             if archive_dir.is_symlink():raise CommandError(7)
             archive_dir.mkdir(exist_ok=True)
@@ -213,7 +263,8 @@ class DurableDemo(DemoDocker):
             with tempfile.TemporaryDirectory(dir=self.root) as temp:
                 archive = Path(temp) / 'legacy.tar'
                 upload.export_verified(archive)
-                entry = self.catalog.get(self._digest(archive))
+                digest = self._digest(archive)
+                entry = self.catalog.get(digest) if digest in self.static_digests else None
                 if entry is None:
                     return 0xff
                 if self.active and self.slots[self.active] == entry and self.software:
@@ -279,5 +330,6 @@ class DurableDemo(DemoDocker):
             self._save('idle')
 
     def close(self):
+        if self.signed:self.signed.db.close()
         # Explicit close releases process ownership, not deployed containers.
         self.owner.close()

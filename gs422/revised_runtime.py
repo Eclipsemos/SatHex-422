@@ -153,6 +153,16 @@ class Revised:
                         self._select_upload('modern')
             elif action == 'end':
                 result = self.staging.end(**parameters, publish=self._set_erase_status)
+                if result == 0 and not self.staging.ordinary_file and self.software_backend:
+                    admit = getattr(self.software_backend,'admit_upload',None)
+                    if admit:
+                        try:
+                            admit(self.staging)
+                        except CommandError:
+                            with self.staging.lock:
+                                self.staging.state.update(status=0x40,signed_digest=None)
+                                self.staging._save()
+                            raise
             elif action == 'erase' and self.software_backend:
                 self._set_erase_status(0x10)
                 result = self.software_backend.ota(action, parameters, self.staging)

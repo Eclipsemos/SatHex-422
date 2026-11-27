@@ -35,11 +35,13 @@ def load_config(path):
     c=json.loads(Path(path).read_text())
     required={'mode','control_port','upload_port','state_root','records_root','telemetry_file',
               'telemetry_max_age','allow_fixture_telemetry','catalog','ota_capacity','enable_reboot'}
-    if not required<=set(c) or set(c)-required-{'fixture_io_root','algorithms','ssd_root','ssd_uuid','ota_crc','ht226_root'}:raise ValueError('configuration keys do not match schema')
+    if not required<=set(c) or set(c)-required-{'fixture_io_root','algorithms','ssd_root','ssd_uuid','ota_crc','ht226_root','publisher_key'}:raise ValueError('configuration keys do not match schema')
     if c.get('fixture_io_root') is not None and (not isinstance(c['fixture_io_root'],str) or not Path(c['fixture_io_root']).is_absolute()):
         raise ValueError('fixture IO root must be explicit absolute path')
     if 'ht226_root' in c and not Path(c['ht226_root']).is_absolute():
         raise ValueError('ht226_root must be absolute')
+    if 'publisher_key' in c and not Path(c['publisher_key']).is_absolute():
+        raise ValueError('publisher_key must be an absolute path')
     if c['mode']!='lab':raise ValueError('only explicitly labelled lab backend is implemented')
     for key in ('control_port','upload_port','state_root','records_root','telemetry_file'):
         if not isinstance(c[key],str) or not Path(c[key]).is_absolute():raise ValueError(key+' must be absolute')
@@ -56,8 +58,12 @@ def load_config(path):
         if not Path(c.get('ssd_root') or '').is_absolute() or not re.fullmatch(r'[a-zA-Z0-9-]+', c.get('ssd_uuid') or ''):
             raise ValueError('SSD requires an absolute mount and filesystem UUID')
     for key, entry in c.get('algorithms', {'1':{'cpu_image':'active'}}).items():
-        if key not in {str(i) for i in range(16)} or set(entry)-{'cpu_image','device','npu_image','ht226_image','capture_job'}:
+        if key not in {str(i) for i in range(16)} or set(entry)-{'cpu_image','device','npu_image','ht226_image','capture_job','capture_dir'}:
             raise ValueError('invalid algorithm registration')
+        if 'capture_dir' in entry:
+            path=entry['capture_dir']
+            if key not in ('0','1') or not Path(path).is_absolute() or any(c in path for c in ',\r\n'):
+                raise ValueError('invalid local signed-release capture path')
         if 'capture_job' in entry:
             profile = entry['capture_job']
             if key not in ('0','1') or set(profile)-{'release_copies'} != {'capture','release_image','decoder_image'}:
@@ -110,7 +116,7 @@ def serve(c):
         values = dict.fromkeys(tmg.BY_ID, 0)
         values.update(tmg.INVALID)
         deadline = 0  # The collector sets freshness after its first valid sample.
-        software=DurableDemo(root/'software',c['catalog'])
+        software=DurableDemo(root/'software',c['catalog'],publisher_key=c.get('publisher_key'),profiles=c.get('algorithms'))
         published = PublishedFiles(c['ht226_root']) if 'ht226_root' in c else None
         fixture=None
         if c.get('fixture_io_root'):

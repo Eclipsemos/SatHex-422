@@ -81,7 +81,7 @@ class Staging:
                 return 0xff
             self.db.execute('DELETE FROM packets')
             self.state.update(status=0x20, check=0, errors=0, bus_errors=0,
-                              ordinary_file=self.ordinary_gate, publish_failed=False,
+                              ordinary_file=self.ordinary_gate, publish_failed=False, signed_digest=None,
                               file_id=self.state['file_id'] + 1, size=None, checksum=None, request=request, next_missing=0)
             self._save()
             return 0

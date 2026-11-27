@@ -24,6 +24,9 @@ class PayloadBackend:
 
     def version(self):return self.software.version()
 
+    def admit_upload(self, staging):
+        self.software.admit_upload(staging)
+
     def activate_legacy(self, upload):
         with self.lock:
             if self._files_busy() or self.scheduler and self.scheduler.busy():

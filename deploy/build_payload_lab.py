@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 
 ROOT=Path(__file__).resolve().parents[1]
-VERSION='0.1.0~lab14'
+VERSION='0.1.0~lab15'
 
 
 def main():
@@ -36,7 +36,7 @@ Architecture: all
 Maintainer: SatHex Development
 Section: misc
 Priority: optional
-Depends: python3 (>= 3.10), systemd
+Depends: python3 (>= 3.10), systemd, openssl (>= 3.0)
 Description: Explicit laboratory dual-UART payload runtime
  No automatic UART takeover or fixture activation. Configure trusted packages,
  external drivers and telemetry producer before enabling a runtime.

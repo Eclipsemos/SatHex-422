@@ -49,10 +49,19 @@ class Scheduler:
             self.software.task = None
         self.software._save('idle')
 
-    def _active_capture(self, entry):
+    def _active_capture(self, entry, task_id=None):
         profile = entry.get('capture_job')
-        if profile and self.software.active:
+        if self.software.active and (profile or entry.get('capture_dir')):
             active_image = self.software.slots[self.software.active]['image_id']
+            bindings = getattr(self.software,'signed_bindings',{})
+            if isinstance(bindings,dict) and active_image in bindings:
+                decoder = bindings[active_image].get(task_id)
+                capture = entry.get('capture_dir') or (profile or {}).get('capture')
+                if decoder and capture:
+                    return dict(release_image=active_image,decoder_image=decoder,capture=capture)
+                return None
+            if not profile:
+                return None
             if active_image == profile['release_image']:
                 return profile
             if active_image in profile.get('release_copies', ()):
@@ -63,7 +72,7 @@ class Scheduler:
         with self.lock:
             self._refresh()
             entry = self.registry.get(str(task_id), {})
-            profile = self._active_capture(entry)
+            profile = self._active_capture(entry, task_id)
             image = profile['decoder_image'] if profile else entry.get('ht226_image')
             if image is None or self.result_files is None:
                 raise CommandError(7)
@@ -156,7 +165,7 @@ class Scheduler:
                 image = entry.get('npu_image') if params['npu'] else entry['cpu_image']
                 if image == 'active':
                     image = self.software.slots[self.software.active]['image_id']
-                profile = self._active_capture(entry)
+                profile = self._active_capture(entry, ident)
                 if profile:
                     if params['npu'] or self.result_files is None:
                         raise CommandError(7)
